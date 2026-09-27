@@ -416,7 +416,11 @@ sine ease-in-out; a jump of several states takes a third longer per extra state)
 viewport's height), and back when it drops below `line + hysteresis` (0.1), so a row hovering on the line never
 flickers. Rows are watched with IntersectionObservers: nothing reads the scroll once the end element has gone by (the
 props stop turning with it), and there is no animation loop at all while nothing moves — frames are asked for only
-while the approach catches up with the scroll, a state or the dock moves, or the props or the flag turn. The rows get
+while the approach catches up with the scroll, a state or the dock moves, or the props or the flag turn. With `follow: 'scroll'` the camera instead follows the
+scroll between the states (damped, as the approach is): it is at pose k exactly as row k's top meets the line and
+moves on pro rata towards the next, the last row past the line is the active one and its bar fills on the way to the
+next — a smooth scrub in the same layout (the rows' places are read on each scroll event then, and the canvas draws
+while the scroll moves); `'tween'`, the default, is the stepped behaviour above. The rows get
 the same classes, custom properties and events as in the scrub: `is-active` and `--inspect-active` on the state's row,
 `--inspect-fill` filling with its move (full on the rows before), `drone:reach` / `drone:unreach` as states are
 reached and left. As the drone arrives the canvas docks to the top `dock` (0.5) of its height: the view is cropped to
@@ -448,7 +452,7 @@ damped, so a fast flick cannot expose an intermediate frame. Without a track it 
     …the copy…
   </div>
 </section>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@188408b/drone-hero.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@97cf511/drone-hero.js"></script>
 <script>DroneHero.mount('#drone', { track: 'closest:.section_hero' });</script>
 ```
 

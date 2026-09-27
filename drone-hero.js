@@ -144,6 +144,8 @@
     // pose — each tweened to over `tween` ms when its row crosses a line in the viewport, and still between. The copy
     // scrolls normally; nothing reads the scroll once the approach is over, and the canvas only draws while a move runs
     steps: 'narrow',           // where: 'narrow' = on screens up to `breakpoint` (the scrubbed inspection stays above it), true = everywhere, false = never
+    follow: 'tween',           // how the camera moves between the states: 'tween' = a timed move when a row crosses the line, still between; 'scroll' = it follows
+                               // the scroll (damped), arriving at each pose as its row's top reaches the line — a smooth scrub, in the same layout
     line: 0.68,                // a row becomes the active one when its top rises above this share of the viewport's height…
     hysteresis: 0.1,           // … and only gives it up when its top drops back below line + this much, so a row hovering on the line never flickers
     tween: 1000,               // ms for the move to a state, on a gentle ease-in-out (a jump of several states takes a third longer per extra state); prefers-reduced-motion: instant
@@ -525,6 +527,8 @@
     // ---- stepped: the inspection as discrete states (0 = the arrival, k = pose k), each one tweened to when its row
     // crosses the line; the approach before it stays on the scroll. Nothing here runs per scroll event or per frame at rest
     let stepped = false, step = 0, rowStep = 0, gate = false, sq = 0, stepU = 1, tw = null, liveApproach = true, rowIOs = [], endIO = null;
+    let fq = 0, fFills = [];   // follow: 'scroll' — the camera's target on the path, and the rows' bars, read from the rows' places
+    const follow = () => inspect && inspect.follow === 'scroll';
     let dk = 0, docked = false, dockBg = '';   // the dock: 0 = the full canvas, 1 = the band; docked = the canvas has been resized to the band
     const hostHeight0 = host.style.height;   // the host's own inline height (e.g. the embed's height:100%), put back when it undocks
     const wantSteps = () => !!(inspect && endEl && global.IntersectionObserver && (inspect.steps === true || (inspect.steps === 'narrow' && isNarrow())));
@@ -542,9 +546,24 @@
     // the rows count only once the drone has arrived; the dock follows the arrival too
     function updateGate() {
       const g = progressTarget >= 0.999 ? true : progressTarget < 0.97 ? false : gate; gate = g;
-      const k = g ? rowStep : 0; if (k !== step) goStep(k);
+      if (!follow()) { const k = g ? rowStep : 0; if (k !== step) goStep(k); }
       const dg = progressTarget >= 0.999 ? true : progressTarget < 0.995 ? false : dk === 1;   // its own, narrow hysteresis: a resize each way, so not on every pixel
       const d = dg && dockF() < 1 ? 1 : 0; if (d !== dk) setDock(d);
+    }
+    // follow: 'scroll' — how far past the line each row's top is (the arrival counts as row 0, past when the end element is above the
+    // canvas's top), and so where on the path the camera should be: at pose k exactly as row k's top meets the line, in between pro rata.
+    // The active row is the last one past the line, and its bar fills on the way to the next (the last one's by the time the band leaves)
+    function readFollow() {
+      if (!rows) rows = rowEls(); const P = inspect.poses, N = P.length, L = (+inspect.line || 0.68) * (global.innerHeight || 1);
+      const a = [gate ? 1 : -1]; if (gate) { const er = endEl.getBoundingClientRect(), hr = host.getBoundingClientRect(); a[0] = hr.top - er.top; }
+      for (let k = 1; k <= N; k++) { const r = rows.find(x => x.n === k); a.push(r ? L - r.el.getBoundingClientRect().top : -1e9); }
+      let q = 0, st = 0; const fills = new Array(N).fill(0);
+      if (gate && a[0] >= 0) { let i = 0; while (i < N && a[i + 1] >= 0) i++; st = i;
+        q = i === N ? stateQ(N) : stateQ(i) + (stateQ(i + 1) - stateQ(i)) * Math.min(1, a[i] / Math.max(1, a[i] - a[i + 1]));
+        const rem = trackEl ? Math.max(0, trackEl.getBoundingClientRect().bottom - host.getBoundingClientRect().bottom) : 0;   // the scroll left before the band leaves, for the last bar
+        for (let k = 1; k <= N; k++) { const D = k < N ? a[k] - a[k + 1] : a[k] + rem; fills[k - 1] = a[k] < 0 ? 0 : Math.min(1, a[k] / Math.max(1, D)); } }
+      const changed = q !== fq || st !== step || fills.some((f, i) => Math.abs(f - (fFills[i] || 0)) > 0.004);
+      fq = q; step = st; fFills = fills; if (changed) { shownPos = -1; wake(); }
     }
     function goStep(k) {
       const from = sq, to = stateQ(k), jump = Math.abs(k - step); step = k;
@@ -565,7 +584,7 @@
     function enterSteps() {
       stepped = true; pos = Math.min(1, pos); posTarget = progressTarget; rowStep = 0; step = 0; sq = 0; tw = null; stepU = 1; dk = 0; docked = false; gate = false;
       if (!rows) rows = rowEls();
-      const onRows = () => { const s = readRows(); if (s !== rowStep) { rowStep = s; updateGate(); } };
+      const onRows = () => { if (follow()) return; const s = readRows(); if (s !== rowStep) { rowStep = s; updateGate(); } };
       const L = +inspect.line || 0.68, Hy = +inspect.hysteresis || 0;   // two lines, so a row crossing either is looked at: the line itself, and the line plus the hysteresis
       for (const m of [L, Math.min(1, L + Hy)]) { const o = new IntersectionObserver(onRows, { rootMargin: '0px 0px ' + (-(1 - m) * 100).toFixed(2) + '% 0px' }); for (const r of rows) o.observe(r.el); rowIOs.push(o); }
       // the approach is live while the end element is on screen or below it; once it is above, the scroll is not read at all
@@ -574,6 +593,7 @@
       rowStep = readRows(); liveApproach = true; progressTarget = readProgress(); posTarget = pos = progress = progressTarget; inspTarget = 0;
       gate = progressTarget >= 0.999; step = gate ? rowStep : 0; sq = stateQ(step);
       if (gate && dockF() < 1) { dk = 1; dockDone(); }
+      if (follow()) { readFollow(); sq = fq; }
       shownPos = -1;
     }
     function leaveSteps() {
@@ -621,6 +641,7 @@
     // the same, by state: the rows before the state full, the state's own filling with its move, the ones after empty; its hotspot fades in with the move
     function steppedAt() {
       const P = inspect.poses, u = stepU;
+      if (follow()) return { hots: P.map((p, k) => k + 1 === step ? 1 : 0), active: step - 1, fills: P.map((p, k) => fFills[k] || 0) };
       const fills = P.map((p, k) => { const r = rows && rows.find(x => x.n === k + 1), f0 = r && r.from != null ? r.from : 0, goal = k + 1 < step ? 1 : k + 1 === step ? 1 : 0; return f0 + (goal - f0) * u; });
       return { hots: P.map((p, k) => k + 1 === step ? u : 0), active: step - 1, fills };
     }
@@ -733,7 +754,7 @@
     const onScroll = () => {
       if (stepped) {   // the approach follows the scroll until the end element has gone by; after that the scroll is not read (the props stop with it)
         if (liveApproach) { spinTarget = (global.scrollY || 0) / 1000 * (+CONFIG.propScroll || 0) * Math.PI * 2; progressTarget = readProgress(); } else progressTarget = 1;
-        inspTarget = 0; posTarget = progressTarget; updateGate(); wake(); if (!liveApproach) return;
+        inspTarget = 0; posTarget = progressTarget; updateGate(); if (follow()) readFollow(); wake(); if (!liveApproach) return;
       } else { spinTarget = (global.scrollY || 0) / 1000 * (+CONFIG.propScroll || 0) * Math.PI * 2; progressTarget = trackEl ? readProgress() : 1; inspTarget = readInspect(); posTarget = progressTarget + inspTarget; }
       setVar(CONFIG.scrollVar, ease(progressTarget), 3); wake();
       if (trackEl && CONFIG.exitVar) { const tr = trackEl.getBoundingClientRect(), hr = host.getBoundingClientRect(); const ex = Math.min(1, Math.max(0, 1 - (tr.bottom - hr.top) / Math.max(1, hr.height))).toFixed(4); host.style.setProperty(CONFIG.exitVar, ex); trackEl.style.setProperty(CONFIG.exitVar, ex); } };
@@ -743,6 +764,7 @@
       raf = 0; if (!alive) return; inTick = true;
       const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
       // a state's move: time-based, on one ease; the scroll has no hand in it
+      if (stepped && follow() && sq !== fq) { sq = reduced ? fq : sq + (fq - sq) * Math.min(1, (+CONFIG.damping || 0.12) * dt * 60); if (Math.abs(fq - sq) < 1e-5) sq = fq; shownPos = -1; }   // following: damped as the approach is
       if (tw) { const u = Math.min(1, (now - tw.t0) / tw.dur); stepU = u; sq = tw.from + (tw.to - tw.from) * easeIO(u); if (u >= 1) { sq = tw.to; tw = null; } shownPos = -1; }
       if (visible && posTarget !== pos) { pos = reduced ? posTarget : pos + (posTarget - pos) * Math.min(1, (+CONFIG.damping || 0.12) * dt * 60); if (Math.abs(posTarget - pos) < 1e-5) pos = posTarget; progress = Math.min(1, pos); insp = stepped ? sq : Math.max(0, pos - 1); }
       if (visible && curPos() !== shownPos) place();
@@ -754,7 +776,7 @@
       }
       if (dirty && visible && now - lastRender >= frameMs - 2) { dirty = false; lastRender = now; render(); }
       inTick = false;
-      const more = tw || (visible && (posTarget !== pos || dirty || (!reduced && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
+      const more = tw || (stepped && follow() && sq !== fq) || (visible && (posTarget !== pos || dirty || (!reduced && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
       if (more) wake();
     }
     wake();
@@ -788,5 +810,5 @@
       .then(([, buf]) => new Promise((res, rej) => new global.THREE.GLTFLoader().parse(buf, url.replace(/[^/]*$/, ''), res, rej)))
       .then(gltf => build(host, CONFIG, gltf));
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.17.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.18.0' };
 })(typeof window !== 'undefined' ? window : this);
