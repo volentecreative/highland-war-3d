@@ -419,12 +419,13 @@ props stop turning with it), and there is no animation loop at all while nothing
 while the approach catches up with the scroll, a state or the dock moves, or the props or the flag turn. The rows get
 the same classes, custom properties and events as in the scrub: `is-active` and `--inspect-active` on the state's row,
 `--inspect-fill` filling with its move (full on the rows before), `drone:reach` / `drone:unreach` as states are
-reached and left. As the drone arrives the canvas docks to the top `dock` (0.5) of its height: the framing moves into
-the band in one move, the canvas is then resized to it (it draws only what shows) and takes a background
+reached and left. As the drone arrives the canvas docks to the top `dock` (0.5) of its height: the view is cropped to
+the band at once (the camera and its projection never change, so neither does the perspective, and at the arrival
+the copy's top meets the band's bottom, so the switch is invisible; `pointNarrow`'s y wants to be about half of
+`dock` to sit in the band's middle), the canvas is resized to it (it draws only what shows) and takes a background
 (`dockBackground`; by default the nearest ancestor's background colour) so the copy disappears under it; while
 docked the track and the host carry `dockClass` (`is-docked`), and the canvas may draw at up to `dockPixelRatio` (3)
-— the band is half the pixels. Docked, a
-pose keeps the motor's size and place on screen, up to `dockZoom` (0.55) of the band and its middle. The props'
+— the band is half the pixels. The props'
 idle turn (`propSeconds`) stops with the approach, so the docked canvas is at rest between moves. With `prefers-reduced-motion` the states
 and the dock switch instantly. The page's side, up to the breakpoint: the sticky holder only the band's height (the canvas inside it
 still the full height, so the hero is full-screen; the holder then stays pinned until the section's end has passed

@@ -146,9 +146,8 @@
     line: 0.68,                // a row becomes the active one when its top rises above this share of the viewport's height…
     hysteresis: 0.1,           // … and only gives it up when its top drops back below line + this much, so a row hovering on the line never flickers
     tween: 1000,               // ms for the move to a state, on a gentle ease-in-out (a jump of several states takes a third longer per extra state); prefers-reduced-motion: instant
-    dock: 0.5,                 // stepped only: once the drone has arrived, the canvas docks to this share of its height at its top (the framing follows it
-                               // in one move, then the canvas is resized to the band, so it draws only what shows); 0 = no dock
-    dockZoom: 0.55,
+    dock: 0.5,                 // stepped only: once the drone has arrived, the canvas docks to this share of its height at its top, at once (the view is cropped to it,
+                               // never reframed, and the canvas resized to it, so it draws only what shows; pointNarrow's y wants to be about half this); 0 = no dock
     dockPixelRatio: 3,         // docked, the canvas is half the pixels, so it may draw at up to this pixel ratio (the device's own, where it is lower); null = the usual cap
     dockClass: 'is-docked',    // set on the track (and the host) while docked, so the page can put its copy under the band only then (e.g. z-index: -1 on the section) and over the drone before; '' = none            // docked, a pose keeps the motor's size on screen (its zoom is a share of the full canvas), up to this share of the band's height
     dockBackground: ''         // the docked band's background, so the copy scrolls under it; '' = the nearest ancestor's background colour
@@ -487,15 +486,16 @@
     const varLast = {}; const setVar = (name, v, dp, narrowToo) => { if (!name) return; const narrow = isNarrow(); if (narrow && !narrowToo) return; const s = narrow ? (Math.round(v * 50) / 50).toFixed(2) : v.toFixed(dp || 2); if (varLast[name] === s) return; varLast[name] = s; host.style.setProperty(name, s); if (trackEl) trackEl.style.setProperty(name, s); };
     const isNarrow = () => !!(global.matchMedia && global.matchMedia('(max-width: ' + (+CONFIG.breakpoint || 991) + 'px)').matches);
     const endPoint = () => (isNarrow() && CONFIG.pointNarrow) || CONFIG.point || { x: 0.5, y: 0.5 };
-    const zoomDist = z => { z = Math.max(0.05, z || 0.36); const k = fullH() / frameH(), M = inspect && +inspect.dockZoom > 0 ? +inspect.dockZoom : 1; return motorH / (2 * Math.tan((+CONFIG.fov || 30) * D2R / 2) * Math.min(z * k, Math.max(z, M))); };   // docked, the zoom stays a share of the full canvas (the motor keeps its size on screen), but no more than dockZoom of the band
+    const zoomDist = z => motorH / (2 * Math.tan((+CONFIG.fov || 30) * D2R / 2) * Math.max(0.05, z || 0.36));   // a share of the full canvas's height, docked or not
     // the camera at a heading (radians) and distance from camTarget, with the target at (px, py) of the frame
     function aim(az, el, dist, px, py) {
       const dir = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
       camera.up.set(-Math.sin(az) * Math.sin(el), Math.cos(el), -Math.cos(az) * Math.sin(el));   // the roll stays continuous up to straight overhead
       camera.position.copy(camTarget).add(dir.multiplyScalar(dist)); camera.lookAt(camTarget);
       camera.near = Math.max(0.02, dist * 0.05); camera.far = dist + droneR * 4 + flagReach; edgeMat.uniforms.uNear.value = camera.near; edgeMat.uniforms.uFar.value = camera.far; for (const m of lineMats) m.uniforms.uNear.value = camera.near;
-      const f = frameH(), k = fullH() / f; if (k > 1) py = Math.min(py * k, Math.max(py, 0.5));   // docking, the point keeps its place on screen (up to the band's middle), as the zoom keeps its size
-      camera.aspect = w / f; camera.setViewOffset(w, f, (0.5 - px) * w, (0.5 - py) * f, w, h); camera.updateProjectionMatrix(); camera.updateMatrixWorld();   // framed in the band (f) when docked; the canvas shows its top h
+      // the projection is always the full canvas's: docking only crops it to the band, so neither the view nor the perspective changes
+      // (the narrow point wants to sit in the band's middle, y about dock / 2)
+      const F = fullH(); camera.aspect = w / F; camera.setViewOffset(w, F, (0.5 - px) * w, (0.5 - py) * F, w, h); camera.updateProjectionMatrix(); camera.updateMatrixWorld();   // framed in the band (f) when docked; the canvas shows its top h
     }
     // ---- the inspection: the camera orbits the motor through the poses, on one smooth curve, as the end section scrolls
     let hot = null;   // the hotspots' overlay: { svg, items: [{ g, dot, ring, path, label }] }
@@ -524,12 +524,11 @@
     // ---- stepped: the inspection as discrete states (0 = the arrival, k = pose k), each one tweened to when its row
     // crosses the line; the approach before it stays on the scroll. Nothing here runs per scroll event or per frame at rest
     let stepped = false, step = 0, rowStep = 0, gate = false, sq = 0, stepU = 1, tw = null, liveApproach = true, rowIOs = [], endIO = null;
-    let dk = 0, dkTw = null, docked = false, dockBg = '';
-    const hostHeight0 = host.style.height;   // the host's own inline height (e.g. the embed's height:100%), put back when it undocks   // the dock: 0 = the full canvas, 1 = the band; docked = the canvas has been resized to the band
+    let dk = 0, docked = false, dockBg = '';   // the dock: 0 = the full canvas, 1 = the band; docked = the canvas has been resized to the band
+    const hostHeight0 = host.style.height;   // the host's own inline height (e.g. the embed's height:100%), put back when it undocks
     const wantSteps = () => !!(inspect && endEl && global.IntersectionObserver && (inspect.steps === true || (inspect.steps === 'narrow' && isNarrow())));
     const dockF = () => stepped && +inspect.dock > 0 && +inspect.dock < 1 ? +inspect.dock : 1;
     const fullH = () => docked ? h / dockF() : h;                      // the canvas's height undocked
-    const frameH = () => fullH() * (1 - dk * (1 - dockF()));           // the height the camera frames: the full canvas, the band, or between while it docks
     const curPos = () => stepped ? Math.min(1, pos) + sq : pos;        // the camera's place on the one path: the approach (on the scroll) plus the state's
     const stateQ = k => { if (k <= 0) return 0; const p = inspect.poses[k - 1], wn = inspect.windows[k - 1] || [1, 1]; return Math.min(1, p.at != null ? +p.at : Array.isArray(p.hold) && p.hold.length === 2 ? +p.hold[1] : +wn[1]); };
     const easeIO = u => (1 - Math.cos(Math.PI * u)) / 2;   // sine in-out: its fastest is only 1.57 times its average, so a move never lunges
@@ -543,7 +542,8 @@
     function updateGate() {
       const g = progressTarget >= 0.999 ? true : progressTarget < 0.97 ? false : gate; gate = g;
       const k = g ? rowStep : 0; if (k !== step) goStep(k);
-      const d = g && dockF() < 1 ? 1 : 0; if (d !== (dkTw ? dkTw.to : dk)) setDock(d);
+      const dg = progressTarget >= 0.999 ? true : progressTarget < 0.995 ? false : dk === 1;   // its own, narrow hysteresis: a resize each way, so not on every pixel
+      const d = dg && dockF() < 1 ? 1 : 0; if (d !== dk) setDock(d);
     }
     function goStep(k) {
       const from = sq, to = stateQ(k), jump = Math.abs(k - step); step = k;
@@ -552,18 +552,17 @@
       shownPos = -1; wake();
     }
     function setDock(d) {
-      if (d === 1) { dkTw = reduced ? null : { from: dk, to: 1, t0: performance.now(), dur: +inspect.tween || 1000 }; if (!dkTw) { dk = 1; dockDone(); } }
-      else { if (docked) { docked = false; host.style.height = hostHeight0; host.style.background = CONFIG.background; dockMark(false); frame(); }   // back to the full canvas, still framed in the band, then out
-        dkTw = reduced ? null : { from: dk, to: 0, t0: performance.now(), dur: +inspect.tween || 1000 }; if (!dkTw) dk = 0; }
+      // at once, both ways: the view is only cropped (the camera never changes), and at the arrival the copy's top meets the band's bottom, so
+      // there is nothing under the band to hide and nothing below it to show — the switch is invisible
+      if (d === 1) { dk = 1; dockDone(); }
+      else { dk = 0; if (docked) { docked = false; host.style.height = hostHeight0; host.style.background = CONFIG.background; dockMark(false); frame(); } }
       shownPos = -1; wake();
     }
     // the dock's move has finished: the canvas becomes the band (drawn at once, so the resize never shows a blank frame) and takes its background
     function dockDone() { if (docked || !stepped) return; docked = true; host.style.height = (dockF() * 100) + '%'; host.style.background = dockBg || CONFIG.background; dockMark(true); frame(); }
     function dockMark(on) { const c = inspect && inspect.dockClass; if (!c) return; host.classList.toggle(c, on); if (trackEl) trackEl.classList.toggle(c, on); }
-    let clipShown = '';
-    function applyClip() { const c = !docked && dk > 0 ? 'inset(0 0 ' + Math.max(0, h - frameH()).toFixed(1) + 'px 0)' : ''; if (c !== clipShown) { clipShown = c; host.style.clipPath = c; } }
     function enterSteps() {
-      stepped = true; pos = Math.min(1, pos); posTarget = progressTarget; rowStep = 0; step = 0; sq = 0; tw = null; stepU = 1; dk = 0; dkTw = null; docked = false; gate = false;
+      stepped = true; pos = Math.min(1, pos); posTarget = progressTarget; rowStep = 0; step = 0; sq = 0; tw = null; stepU = 1; dk = 0; docked = false; gate = false;
       if (!rows) rows = rowEls();
       const onRows = () => { const s = readRows(); if (s !== rowStep) { rowStep = s; updateGate(); } };
       const L = +inspect.line || 0.68, Hy = +inspect.hysteresis || 0;   // two lines, so a row crossing either is looked at: the line itself, and the line plus the hysteresis
@@ -578,9 +577,9 @@
     }
     function leaveSteps() {
       for (const o of rowIOs) o.disconnect(); rowIOs = []; if (endIO) endIO.disconnect(); endIO = null; liveApproach = true;
-      pos = Math.min(1, pos) + sq; stepped = false; tw = dkTw = null; dk = 0; sq = 0; stepU = 1;
+      pos = Math.min(1, pos) + sq; stepped = false; tw = null; dk = 0; sq = 0; stepU = 1;
       if (docked) { docked = false; host.style.height = hostHeight0; host.style.background = CONFIG.background; dockMark(false); }
-      applyClip(); shownPos = -1;
+      shownPos = -1;
     }
     // the band's background: the nearest ancestor's, so it reads as the page (and the copy scrolling under it is hidden)
     function readDockBg() {
@@ -627,7 +626,7 @@
     // the camera and everything that follows the scroll, for the current pos: the approach (its fades over its eased
     // progress e) running on into the inspection where there is one
     function place() {
-      const P = curPos(), useInsp = !!inspect, p = Math.min(1, P), e = ease(p), q = useInsp ? Math.max(0, P - 1) : 0; applyClip();
+      const P = curPos(), useInsp = !!inspect, p = Math.min(1, P), e = ease(p), q = useInsp ? Math.max(0, P - 1) : 0;
       let cpos = useInsp ? P : p; if (useInsp) { const WL = inspect.windows[inspect.windows.length - 1] || [0, 1], L = inspect.easeOut == null ? WL[1] - WL[0] : +inspect.easeOut; if (L > 0 && P > 2 - L) { const u = Math.min(1, (P - (2 - L)) / L); cpos = 2 - L + L * (u + u * u - u * u * u); } }   // the last stretch eased out: the camera's speed falls smoothly to nothing at the end (easeOut)
       const c = camAt(cpos, useInsp);
       pivot.rotation.x = tiltRad * (1 - e); pivot.updateMatrixWorld(true);   // pitched at the top of the page, level by the arrival
@@ -741,9 +740,8 @@
     function tick(now) {
       raf = 0; if (!alive) return; inTick = true;
       const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
-      // a state's move and the dock: time-based, on one ease each; the scroll has no hand in them
+      // a state's move: time-based, on one ease; the scroll has no hand in it
       if (tw) { const u = Math.min(1, (now - tw.t0) / tw.dur); stepU = u; sq = tw.from + (tw.to - tw.from) * easeIO(u); if (u >= 1) { sq = tw.to; tw = null; } shownPos = -1; }
-      if (dkTw) { const u = Math.min(1, (now - dkTw.t0) / dkTw.dur); dk = dkTw.from + (dkTw.to - dkTw.from) * easeIO(u); if (u >= 1) { dk = dkTw.to; const done = dk === 1; dkTw = null; if (done) dockDone(); } shownPos = -1; }
       if (visible && posTarget !== pos) { pos = reduced ? posTarget : pos + (posTarget - pos) * Math.min(1, (+CONFIG.damping || 0.12) * dt * 60); if (Math.abs(posTarget - pos) < 1e-5) pos = posTarget; progress = Math.min(1, pos); insp = stepped ? sq : Math.max(0, pos - 1); }
       if (visible && curPos() !== shownPos) place();
       if (!reduced && visible) {
@@ -754,7 +752,7 @@
       }
       if (dirty && visible && now - lastRender >= frameMs - 2) { dirty = false; lastRender = now; render(); }
       inTick = false;
-      const more = tw || dkTw || (visible && (posTarget !== pos || dirty || (!reduced && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
+      const more = tw || (visible && (posTarget !== pos || dirty || (!reduced && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
       if (more) wake();
     }
     wake();
@@ -772,7 +770,7 @@
     return {
       set(patch) { Object.assign(CONFIG, patch || {}); for (const k of COLOR_KEYS) if (patch && k in patch) { RAW[k] = patch[k]; lastColors = ''; } edgeMat.uniforms.uDepthT.value = +CONFIG.depthEdge || 0.012; edgeMat.uniforms.uNormT.value = +CONFIG.normalEdge || 0.25; edgeMat.uniforms.uNormTM.value = CONFIG.normalEdgeMotor == null ? (+CONFIG.normalEdge || 0.25) : +CONFIG.normalEdgeMotor; if (patch && ('grid' in patch || 'gridExtent' in patch)) buildGrid(); applyColors(); onScroll(); frame(); },
       setProgress(p, q) { progressTarget = progress = Math.min(1, Math.max(0, +p || 0)); inspTarget = insp = Math.min(1, Math.max(0, +q || 0)); if (stepped) { tw = null; sq = insp; posTarget = pos = progress; } else posTarget = pos = progress + insp; place(); wake(); },
-      get state() { const d = camera.position.clone().sub(camTarget); return { focus: key, azimuth: azimuth(), startAzimuth: azimuth0(), progress, inspect: stepped ? sq : insp, stepped, step, docked, dock: dk, moving: !!(tw || dkTw), looping: !!raf, heading: [Math.atan2(d.x, d.z) / D2R, Math.atan2(d.y, Math.hypot(d.x, d.z)) / D2R, d.length()], motorHeight: motorH, triangles: tris, props: props.length, pixelRatio: renderer.getPixelRatio(), edgePass: [rt.width, rt.height], tiles: T.nx * T.ny }; },
+      get state() { const d = camera.position.clone().sub(camTarget); return { focus: key, azimuth: azimuth(), startAzimuth: azimuth0(), progress, inspect: stepped ? sq : insp, stepped, step, docked, dock: dk, moving: !!tw, looping: !!raf, heading: [Math.atan2(d.x, d.z) / D2R, Math.atan2(d.y, Math.hypot(d.x, d.z)) / D2R, d.length()], motorHeight: motorH, triangles: tris, props: props.length, pixelRatio: renderer.getPixelRatio(), edgePass: [rt.width, rt.height], tiles: T.nx * T.ny }; },
       destroy() { alive = false; if (raf) cancelAnimationFrame(raf); for (const o of rowIOs) o.disconnect(); if (endIO) endIO.disconnect(); clearInterval(themeWatch); io.disconnect(); removeEventListener('scroll', onScroll); if (ro) ro.disconnect(); else removeEventListener('resize', frame); rt.dispose(); renderer.dispose(); renderer.domElement.remove(); }
     };
   }
@@ -788,5 +786,5 @@
       .then(([, buf]) => new Promise((res, rej) => new global.THREE.GLTFLoader().parse(buf, url.replace(/[^/]*$/, ''), res, rej)))
       .then(gltf => build(host, CONFIG, gltf));
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.15.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.16.0' };
 })(typeof window !== 'undefined' ? window : this);
