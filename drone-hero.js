@@ -491,7 +491,8 @@
       camera.up.set(-Math.sin(az) * Math.sin(el), Math.cos(el), -Math.cos(az) * Math.sin(el));   // the roll stays continuous up to straight overhead
       camera.position.copy(camTarget).add(dir.multiplyScalar(dist)); camera.lookAt(camTarget);
       camera.near = Math.max(0.02, dist * 0.05); camera.far = dist + droneR * 4 + flagReach; edgeMat.uniforms.uNear.value = camera.near; edgeMat.uniforms.uFar.value = camera.far; for (const m of lineMats) m.uniforms.uNear.value = camera.near;
-      const f = frameH(); camera.aspect = w / f; camera.setViewOffset(w, f, (0.5 - px) * w, (0.5 - py) * f, w, h); camera.updateProjectionMatrix(); camera.updateMatrixWorld();   // framed in the band (f) when docked; the canvas shows its top h
+      const f = frameH(), k = fullH() / f; if (k > 1) py = Math.min(py * k, Math.max(py, 0.5));   // docking, the point keeps its place on screen (up to the band's middle), as the zoom keeps its size
+      camera.aspect = w / f; camera.setViewOffset(w, f, (0.5 - px) * w, (0.5 - py) * f, w, h); camera.updateProjectionMatrix(); camera.updateMatrixWorld();   // framed in the band (f) when docked; the canvas shows its top h
     }
     // ---- the inspection: the camera orbits the motor through the poses, on one smooth curve, as the end section scrolls
     let hot = null;   // the hotspots' overlay: { svg, items: [{ g, dot, ring, path, label }] }
@@ -741,14 +742,14 @@
       if (visible && posTarget !== pos) { pos = reduced ? posTarget : pos + (posTarget - pos) * Math.min(1, (+CONFIG.damping || 0.12) * dt * 60); if (Math.abs(posTarget - pos) < 1e-5) pos = posTarget; progress = Math.min(1, pos); insp = stepped ? sq : Math.max(0, pos - 1); }
       if (visible && curPos() !== shownPos) place();
       if (!reduced && visible) {
-        if (CONFIG.propSeconds > 0) { idle += dt * Math.PI * 2 / CONFIG.propSeconds; if (droneOn) dirty = true; }   // the propellers go with the rest of the drone: once it has gone there is nothing turning to draw
+        if (CONFIG.propSeconds > 0 && (!stepped || liveApproach)) { idle += dt * Math.PI * 2 / CONFIG.propSeconds; if (droneOn) dirty = true; }   // stepped, the idle turn stops with the approach, so the docked canvas rests   // the propellers go with the rest of the drone: once it has gone there is nothing turning to draw
         if (Math.abs(spinTarget - spin) > 1e-4) { spin += (spinTarget - spin) * Math.min(1, dt * 6); if (Math.abs(spinTarget - spin) < 1e-4) spin = spinTarget; dirty = true; }
         for (const p of props) p.mesh.rotation.y = p.dir * (spin + idle) + p.phase;
         if (flag && flag.shown) { flagT += dt; flag.update(flagT); dirty = true; }
       }
       if (dirty && visible && now - lastRender >= frameMs - 2) { dirty = false; lastRender = now; render(); }
       inTick = false;
-      const more = tw || dkTw || (visible && (posTarget !== pos || dirty || (!reduced && ((CONFIG.propSeconds > 0 && droneOn) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
+      const more = tw || dkTw || (visible && (posTarget !== pos || dirty || (!reduced && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
       if (more) wake();
     }
     wake();
@@ -782,5 +783,5 @@
       .then(([, buf]) => new Promise((res, rej) => new global.THREE.GLTFLoader().parse(buf, url.replace(/[^/]*$/, ''), res, rej)))
       .then(gltf => build(host, CONFIG, gltf));
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.14.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.14.1' };
 })(typeof window !== 'undefined' ? window : this);

@@ -422,7 +422,8 @@ the same classes, custom properties and events as in the scrub: `is-active` and 
 reached and left. As the drone arrives the canvas docks to the top `dock` (0.5) of its height: the framing moves into
 the band in one move, the canvas is then resized to it (it draws only what shows) and takes a background
 (`dockBackground`; by default the nearest ancestor's background colour) so the copy disappears under it. Docked, a
-pose keeps the motor's size on screen, up to `dockZoom` (0.55) of the band. With `prefers-reduced-motion` the states
+pose keeps the motor's size and place on screen, up to `dockZoom` (0.55) of the band and its middle. The props'
+idle turn (`propSeconds`) stops with the approach, so the docked canvas is at rest between moves. With `prefers-reduced-motion` the states
 and the dock switch instantly. The page's side, up to the breakpoint: the end element at the top of its section, the
 section under the pinned canvas (`z-index: -1`; the sticky wrapper `pointer-events: none` so the copy stays tappable),
 and the copy padded down by the band's height, with room after the last row for it to reach the line.
