@@ -152,7 +152,7 @@
     dock: 0.5,                 // stepped only: once the drone has arrived, the canvas docks to this share of its height at its top, at once (the view is cropped to it,
                                // never reframed, and the canvas resized to it, so it draws only what shows; pointNarrow's y wants to be about half this); 0 = no dock
     dockPixelRatio: 3,         // docked, the canvas is half the pixels, so it may draw at up to this pixel ratio (the device's own, where it is lower); null = the usual cap
-    dockClass: 'is-docked',    // set on the track (and the host) while docked, so the page can put its copy under the band only then (e.g. z-index: -1 on the section) and over the drone before; '' = none            // docked, a pose keeps the motor's size on screen (its zoom is a share of the full canvas), up to this share of the band's height
+    dockClass: 'is-docked',    // set on the track, the host and any [data-drone-dock] element inside the track while docked, so the page can put its copy under the band only then (e.g. z-index: -1 on the section) and over the drone before; '' = none            // docked, a pose keeps the motor's size on screen (its zoom is a share of the full canvas), up to this share of the band's height
     dockBackground: ''         // the docked band's background, so the copy scrolls under it; '' = the nearest ancestor's background colour
   };
 
@@ -580,7 +580,7 @@
     }
     // the dock's move has finished: the canvas becomes the band (drawn at once, so the resize never shows a blank frame) and takes its background
     function dockDone() { if (docked || !stepped) return; docked = true; host.style.height = (dockF() * 100) + '%'; host.style.background = dockBg || CONFIG.background; dockMark(true); frame(); }
-    function dockMark(on) { const c = inspect && inspect.dockClass; if (!c) return; host.classList.toggle(c, on); if (trackEl) trackEl.classList.toggle(c, on); }
+    function dockMark(on) { const c = inspect && inspect.dockClass; if (!c) return; host.classList.toggle(c, on); if (trackEl) { trackEl.classList.toggle(c, on); trackEl.querySelectorAll('[data-drone-dock]').forEach(el => el.classList.toggle(c, on)); } }   // and on any [data-drone-dock] in the track, so the page can style it as a combo class
     function enterSteps() {
       stepped = true; pos = Math.min(1, pos); posTarget = progressTarget; rowStep = 0; step = 0; sq = 0; tw = null; stepU = 1; dk = 0; docked = false; gate = false;
       if (!rows) rows = rowEls();
@@ -810,5 +810,5 @@
       .then(([, buf]) => new Promise((res, rej) => new global.THREE.GLTFLoader().parse(buf, url.replace(/[^/]*$/, ''), res, rej)))
       .then(gltf => build(host, CONFIG, gltf));
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.18.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.19.0' };
 })(typeof window !== 'undefined' ? window : this);

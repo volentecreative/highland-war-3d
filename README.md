@@ -428,7 +428,8 @@ the band at once (the camera and its projection never change, so neither does th
 the copy's top meets the band's bottom, so the switch is invisible; `pointNarrow`'s y wants to be about half of
 `dock` to sit in the band's middle), the canvas is resized to it (it draws only what shows) and takes a background
 (`dockBackground`; by default the nearest ancestor's background colour) so the copy disappears under it; while
-docked the track and the host carry `dockClass` (`is-docked`), and the canvas may draw at up to `dockPixelRatio` (3)
+docked the track, the host and any `[data-drone-dock]` element inside the track carry `dockClass` (`is-docked`,
+so e.g. labels over the band can be styled as a combo class), and the canvas may draw at up to `dockPixelRatio` (3)
 — the band is half the pixels. The props'
 idle turn (`propSeconds`) stops with the approach, so the docked canvas is at rest between moves. With `prefers-reduced-motion` the states
 and the dock switch instantly. The page's side, up to the breakpoint: the sticky holder only the band's height (the canvas inside it
@@ -452,7 +453,7 @@ damped, so a fast flick cannot expose an intermediate frame. Without a track it 
     …the copy…
   </div>
 </section>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@97cf511/drone-hero.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@20ac477/drone-hero.js"></script>
 <script>DroneHero.mount('#drone', { track: 'closest:.section_hero' });</script>
 ```
 
