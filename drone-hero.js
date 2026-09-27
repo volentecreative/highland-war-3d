@@ -41,6 +41,7 @@
     runEnd: '',                // optional: a selector (inside the track) for the element whose top reaching the canvas's top ends the path — e.g. the section the drone is meant to arrive in — instead of the track's own end
     damping: 0.12,             // how closely the camera follows the scroll (per frame at 60fps); 1 = instantly
     fov: 30,                   // the camera's vertical field of view, degrees
+    fovNarrow: null,           // on screens up to `breakpoint`: the field of view the lens widens to over the approach (from `fov` at the top of the page to this at the arrival, held after), so more of the scene shows by the split view; the camera keeps its distance, so it is a zoom out, not a change of perspective. null = `fov` throughout
     // the end of the path: beneath the focused motor and out to its side, looking up at it. Headings are about the
     // drone: 0 = from the front, positive = round to the drone's right, negative = round to its left
     azimuth: -28,              // camera heading in degrees at the end; or 'auto': side-on to the focused arm, turned by `turn`
@@ -631,6 +632,7 @@
       const c = camAt(cpos, useInsp);
       pivot.rotation.x = tiltRad * (1 - e); pivot.updateMatrixWorld(true);   // pitched at the top of the page, level by the arrival
       camTarget.copy(target).lerp(droneC, c.centre).applyMatrix4(rig.matrixWorld);   // the look-at point, as the tilt has moved it
+      const fn = CONFIG.fovNarrow != null && isNarrow() ? +CONFIG.fovNarrow : NaN, f0 = +CONFIG.fov || 30; camera.fov = fn > 0 ? f0 + (fn - f0) * e : f0;   // the lens widens over the approach on narrow screens (the distances stay those of `fov`)
       aim(c.az * D2R, c.el * D2R, c.dist, c.px, c.py);
       fadeGrid(); motorColor(e);
       if (flag) { const w = CONFIG.flagFade, f = Array.isArray(w) && w.length === 2 && w[1] > w[0] ? 1 - Math.min(1, Math.max(0, (e - w[0]) / (w[1] - w[0]))) : 1; flag.mat.uniforms.uOpacity.value = (+CONFIG.flagOpacity || 0.85) * f; edgeMat.uniforms.uFlagA.value = f;
@@ -786,5 +788,5 @@
       .then(([, buf]) => new Promise((res, rej) => new global.THREE.GLTFLoader().parse(buf, url.replace(/[^/]*$/, ''), res, rej)))
       .then(gltf => build(host, CONFIG, gltf));
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.16.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.17.0' };
 })(typeof window !== 'undefined' ? window : this);
