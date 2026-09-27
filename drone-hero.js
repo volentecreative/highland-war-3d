@@ -145,10 +145,12 @@
     steps: 'narrow',           // where: 'narrow' = on screens up to `breakpoint` (the scrubbed inspection stays above it), true = everywhere, false = never
     line: 0.68,                // a row becomes the active one when its top rises above this share of the viewport's height…
     hysteresis: 0.1,           // … and only gives it up when its top drops back below line + this much, so a row hovering on the line never flickers
-    tween: 550,                // ms for the move to a state (a jump of more than one state takes 1.4 times as long); prefers-reduced-motion: instant
+    tween: 1000,               // ms for the move to a state, on a gentle ease-in-out (a jump of several states takes a third longer per extra state); prefers-reduced-motion: instant
     dock: 0.5,                 // stepped only: once the drone has arrived, the canvas docks to this share of its height at its top (the framing follows it
                                // in one move, then the canvas is resized to the band, so it draws only what shows); 0 = no dock
-    dockZoom: 0.55,            // docked, a pose keeps the motor's size on screen (its zoom is a share of the full canvas), up to this share of the band's height
+    dockZoom: 0.55,
+    dockPixelRatio: 3,         // docked, the canvas is half the pixels, so it may draw at up to this pixel ratio (the device's own, where it is lower); null = the usual cap
+    dockClass: 'is-docked',    // set on the track (and the host) while docked, so the page can put its copy under the band only then (e.g. z-index: -1 on the section) and over the drone before; '' = none            // docked, a pose keeps the motor's size on screen (its zoom is a share of the full canvas), up to this share of the band's height
     dockBackground: ''         // the docked band's background, so the copy scrolls under it; '' = the nearest ancestor's background colour
   };
 
@@ -273,6 +275,7 @@
     renderer.setClearColor(0x000000, 0); renderer.autoClear = false;
     Object.assign(renderer.domElement.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'block' });
     host.appendChild(renderer.domElement);
+    renderer.domElement.addEventListener('webglcontextrestored', () => { sized.PR = 0; frame(); dirty = true; wake(); });   // a lost context (a phone short of memory) comes back drawn
     const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(+CONFIG.fov || 30, 1, 0.05, 200);
     const pivot = new THREE.Group(), rig = new THREE.Group(); pivot.add(rig); scene.add(pivot);   // the drone rides in the rig, pivoted on its centre: the tilt turns the pivot, and eases away over the approach
     const faceMat = new THREE.MeshBasicMaterial({ color: CONFIG.face, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
@@ -521,14 +524,15 @@
     // ---- stepped: the inspection as discrete states (0 = the arrival, k = pose k), each one tweened to when its row
     // crosses the line; the approach before it stays on the scroll. Nothing here runs per scroll event or per frame at rest
     let stepped = false, step = 0, rowStep = 0, gate = false, sq = 0, stepU = 1, tw = null, liveApproach = true, rowIOs = [], endIO = null;
-    let dk = 0, dkTw = null, docked = false, dockBg = '';   // the dock: 0 = the full canvas, 1 = the band; docked = the canvas has been resized to the band
+    let dk = 0, dkTw = null, docked = false, dockBg = '';
+    const hostHeight0 = host.style.height;   // the host's own inline height (e.g. the embed's height:100%), put back when it undocks   // the dock: 0 = the full canvas, 1 = the band; docked = the canvas has been resized to the band
     const wantSteps = () => !!(inspect && endEl && global.IntersectionObserver && (inspect.steps === true || (inspect.steps === 'narrow' && isNarrow())));
     const dockF = () => stepped && +inspect.dock > 0 && +inspect.dock < 1 ? +inspect.dock : 1;
     const fullH = () => docked ? h / dockF() : h;                      // the canvas's height undocked
     const frameH = () => fullH() * (1 - dk * (1 - dockF()));           // the height the camera frames: the full canvas, the band, or between while it docks
     const curPos = () => stepped ? Math.min(1, pos) + sq : pos;        // the camera's place on the one path: the approach (on the scroll) plus the state's
     const stateQ = k => { if (k <= 0) return 0; const p = inspect.poses[k - 1], wn = inspect.windows[k - 1] || [1, 1]; return Math.min(1, p.at != null ? +p.at : Array.isArray(p.hold) && p.hold.length === 2 ? +p.hold[1] : +wn[1]); };
-    const easeIO = u => u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+    const easeIO = u => (1 - Math.cos(Math.PI * u)) / 2;   // sine in-out: its fastest is only 1.57 times its average, so a move never lunges
     // the active row: the last whose top is above the line, or, for one already active, still above line + hysteresis
     function readRows() {
       if (!rows) rows = rowEls(); const vh = global.innerHeight || 1, L = (+inspect.line || 0.68) * vh, Hy = (+inspect.hysteresis || 0) * vh; let s = 0;
@@ -543,18 +547,19 @@
     }
     function goStep(k) {
       const from = sq, to = stateQ(k), jump = Math.abs(k - step); step = k;
-      if (reduced || !(+inspect.tween > 0)) { sq = to; tw = null; stepU = 1; } else { tw = { from, to, t0: performance.now(), dur: +inspect.tween * (jump > 1 ? 1.4 : 1) }; stepU = 0; }
+      if (reduced || !(+inspect.tween > 0)) { sq = to; tw = null; stepU = 1; } else { tw = { from, to, t0: performance.now(), dur: +inspect.tween * (1 + (Math.max(1, jump) - 1) / 3) }; stepU = 0; }
       if (rows) for (const r of rows) r.from = r.fill == null ? 0 : +r.fill;   // each row's bar runs from where it is
       shownPos = -1; wake();
     }
     function setDock(d) {
-      if (d === 1) { dkTw = reduced ? null : { from: dk, to: 1, t0: performance.now(), dur: +inspect.tween || 550 }; if (!dkTw) { dk = 1; dockDone(); } }
-      else { if (docked) { docked = false; host.style.height = ''; host.style.background = CONFIG.background; frame(); }   // back to the full canvas, still framed in the band, then out
-        dkTw = reduced ? null : { from: dk, to: 0, t0: performance.now(), dur: +inspect.tween || 550 }; if (!dkTw) dk = 0; }
+      if (d === 1) { dkTw = reduced ? null : { from: dk, to: 1, t0: performance.now(), dur: +inspect.tween || 1000 }; if (!dkTw) { dk = 1; dockDone(); } }
+      else { if (docked) { docked = false; host.style.height = hostHeight0; host.style.background = CONFIG.background; dockMark(false); frame(); }   // back to the full canvas, still framed in the band, then out
+        dkTw = reduced ? null : { from: dk, to: 0, t0: performance.now(), dur: +inspect.tween || 1000 }; if (!dkTw) dk = 0; }
       shownPos = -1; wake();
     }
     // the dock's move has finished: the canvas becomes the band (drawn at once, so the resize never shows a blank frame) and takes its background
-    function dockDone() { if (docked || !stepped) return; docked = true; host.style.height = (dockF() * 100) + '%'; host.style.background = dockBg || CONFIG.background; frame(); }
+    function dockDone() { if (docked || !stepped) return; docked = true; host.style.height = (dockF() * 100) + '%'; host.style.background = dockBg || CONFIG.background; dockMark(true); frame(); }
+    function dockMark(on) { const c = inspect && inspect.dockClass; if (!c) return; host.classList.toggle(c, on); if (trackEl) trackEl.classList.toggle(c, on); }
     let clipShown = '';
     function applyClip() { const c = !docked && dk > 0 ? 'inset(0 0 ' + Math.max(0, h - frameH()).toFixed(1) + 'px 0)' : ''; if (c !== clipShown) { clipShown = c; host.style.clipPath = c; } }
     function enterSteps() {
@@ -574,7 +579,7 @@
     function leaveSteps() {
       for (const o of rowIOs) o.disconnect(); rowIOs = []; if (endIO) endIO.disconnect(); endIO = null; liveApproach = true;
       pos = Math.min(1, pos) + sq; stepped = false; tw = dkTw = null; dk = 0; sq = 0; stepU = 1;
-      if (docked) { docked = false; host.style.height = ''; host.style.background = CONFIG.background; }
+      if (docked) { docked = false; host.style.height = hostHeight0; host.style.background = CONFIG.background; dockMark(false); }
       applyClip(); shownPos = -1;
     }
     // the band's background: the nearest ancestor's, so it reads as the page (and the copy scrolling under it is hidden)
@@ -667,7 +672,7 @@
       w = host.clientWidth || 1; h = host.clientHeight || 1; camera.fov = +CONFIG.fov || 30;
       // the canvas at the device's pixel ratio (capped); the edge pass at `supersample` times that, in as many tiles as
       // the pixel budget (and the largest texture) asks for, each with a guard band so the lines run across tile edges
-      const PR = Math.min(devicePixelRatio || 1, coarse ? (+CONFIG.pixelRatioCapCoarse || 1.5) : (+CONFIG.pixelRatioCap || 2));
+      const PR = Math.min(devicePixelRatio || 1, docked && +inspect.dockPixelRatio > 0 ? +inspect.dockPixelRatio : coarse ? (+CONFIG.pixelRatioCapCoarse || 1.5) : (+CONFIG.pixelRatioCap || 2));   // docked: the band is half the pixels, so it can afford the device's own
       let resized = false; if (PR !== sized.PR || w !== sized.w || h !== sized.h) { sized.PR = PR; sized.w = w; sized.h = h; renderer.setPixelRatio(PR); renderer.setSize(w, h, false); resized = true; }   // only on a real change: setSize clears the canvas (a phone's toolbar fires resize on every scroll)
       const S = Math.max(1, +CONFIG.supersample || 1), W = Math.round(w * PR), H = Math.round(h * PR), maxT = Math.min(8192, renderer.capabilities.maxTextureSize || 8192), budget = +CONFIG.pixelBudget || 8e6;
       T.nx = Math.max(1, Math.ceil(W * S / maxT)); T.ny = Math.max(1, Math.ceil(H * S / maxT), Math.ceil(W * S * H * S / (budget * T.nx)));
@@ -783,5 +788,5 @@
       .then(([, buf]) => new Promise((res, rej) => new global.THREE.GLTFLoader().parse(buf, url.replace(/[^/]*$/, ''), res, rej)))
       .then(gltf => build(host, CONFIG, gltf));
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.14.1' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.15.0' };
 })(typeof window !== 'undefined' ? window : this);
