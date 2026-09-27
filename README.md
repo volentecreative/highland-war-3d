@@ -448,7 +448,7 @@ damped, so a fast flick cannot expose an intermediate frame. Without a track it 
     …the copy…
   </div>
 </section>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@644fff0/drone-hero.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@188408b/drone-hero.js"></script>
 <script>DroneHero.mount('#drone', { track: 'closest:.section_hero' });</script>
 ```
 
@@ -468,7 +468,9 @@ spinning on their own axes) and `floor`
 drone if a low arrival elevation would take the camera under the floor);
 `track`, `runEnd` (a selector inside the track for the element whose top reaching the canvas ends the
 path, e.g. the section the drone arrives in, so the canvas can stay pinned across more than one section)
-and `damping` (0.12); `fov` (30°). Headings are about the drone: 0 = from the front, positive
+and `damping` (0.12); `fov` (30°) and `fovNarrow` (null: on screens up to `breakpoint`, the field of view the lens widens
+to over the approach, from `fov` at the top of the page to this at the arrival, and holds after; the camera keeps its
+distance, so more of the scene shows rather than the perspective changing). Headings are about the drone: 0 = from the front, positive
 = round to its right, negative = round to its left. The end of the path: `azimuth` (−28°; or
 `'auto'` = side-on to the focused arm, swung round by `turn`), `elevation` (−14°, from below),
 `zoom` (the motor's height as a fraction of the frame's, 0.36), `point` and `pointNarrow` (where the
