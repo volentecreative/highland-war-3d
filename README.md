@@ -408,6 +408,26 @@ leader to a small square with the pose's `label` above it, as the topo map's cou
 `hotspotClass`). The poses, the windows, `settle` and the rows selector are all in `inspect`; see `INSPECT`
 in the source for the defaults. The inspection runs on every screen size; up to `breakpoint` the fill is written in steps of 0.02.
 
+**On phones and tablets (up to `breakpoint`, 991px) the inspection is stepped** (`inspect.steps`: `'narrow'` by
+default, `true` for every screen, `false` for the scrubbed inspection everywhere). The approach still follows the
+scroll; once the drone has arrived, the copy scrolls normally under a docked band and the camera moves in discrete
+states — the arrival, then pose 01, 02, 03, the same poses as the scrub — each tweened to (`tween`, 550 ms, on one
+ease; a jump of more than one state takes 1.4 times as long) when its row's top rises above `line` (0.68 of the
+viewport's height), and back when it drops below `line + hysteresis` (0.1), so a row hovering on the line never
+flickers. Rows are watched with IntersectionObservers: nothing reads the scroll once the end element has gone by (the
+props stop turning with it), and there is no animation loop at all while nothing moves — frames are asked for only
+while the approach catches up with the scroll, a state or the dock moves, or the props or the flag turn. The rows get
+the same classes, custom properties and events as in the scrub: `is-active` and `--inspect-active` on the state's row,
+`--inspect-fill` filling with its move (full on the rows before), `drone:reach` / `drone:unreach` as states are
+reached and left. As the drone arrives the canvas docks to the top `dock` (0.5) of its height: the framing moves into
+the band in one move, the canvas is then resized to it (it draws only what shows) and takes a background
+(`dockBackground`; by default the nearest ancestor's background colour) so the copy disappears under it. Docked, a
+pose keeps the motor's size and place on screen, up to `dockZoom` (0.55) of the band and its middle. The props'
+idle turn (`propSeconds`) stops with the approach, so the docked canvas is at rest between moves. With `prefers-reduced-motion` the states
+and the dock switch instantly. The page's side, up to the breakpoint: the end element at the top of its section, the
+section under the pinned canvas (`z-index: -1`; the sticky wrapper `pointer-events: none` so the copy stays tappable),
+and the copy padded down by the band's height, with room after the last row for it to reach the line.
+
 The camera is a real one and moves: with `track` set, it dollies along a path over that section's
 scroll, from the whole aircraft centred, dead level and head-on, round and down to beneath the front-left
 motor, looking up at it from its outer side with the rest of the drone above and behind. The target slides from the drone's centre to the
@@ -422,7 +442,7 @@ damped, so a fast flick cannot expose an intermediate frame. Without a track it 
     …the copy…
   </div>
 </section>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@4bc29e8/drone-hero.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@0c1f93e/drone-hero.js"></script>
 <script>DroneHero.mount('#drone', { track: 'closest:.section_hero' });</script>
 ```
 
