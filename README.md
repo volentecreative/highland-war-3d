@@ -514,4 +514,7 @@ the colours `primary`, `secondary`, `gridColor` (the floor grid, falling back to
 `background`, from `--drone-primary`, `--drone-secondary`, `--drone-grid`,
 `--drone-face`, `--drone-bg` with the map's `--topo-label`, `--topo-label-secondary` and
 `--topo-block` as fallbacks. The model loads from beside the script (`model` overrides), and the
-GLTF loader from jsDelivr's copy of three r128 (`loader` overrides).
+GLTF loader from jsDelivr's copy of three r128 (`loader` overrides). `onProgress` (null) is called as the load goes, with
+`{ loaded, total, scripts, built }`: the model's bytes so far and its size (0 when the server does not say, or
+the transfer is compressed), how many of the two scripts (three.js, the loader) are in, and `built` once the drone
+is drawn, so a page's preloader can show real progress; `mount()` itself resolves once the drone is built.
