@@ -36,6 +36,7 @@
   const DEFAULTS = {
     model: '',                 // URL of the GLB; '' = heavy_lift_drone_model.glb beside this script
     loader: 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js',
+    onProgress: null,          // function({ loaded, total, scripts, built }): called as the model's bytes, three.js and the loader come in and once the drone is built (total 0 = the size is not known), for a page's preloader
     focus: 'FL',               // which motor the path ends on: FR, FL, BR, BL, or with ' 2' for the lower ring of the coaxial pairs
     track: '',                 // the tall section the canvas is pinned inside ('closest:.section_hero', a selector, or an element); the camera's path runs over its scroll. '' = hold the end view
     runEnd: '',                // optional: a selector (inside the track) for the element whose top reaching the canvas's top ends the path — e.g. the section the drone is meant to arrive in — instead of the track's own end
@@ -808,10 +809,24 @@
     const CONFIG = Object.assign({}, DEFAULTS, config || {});
     // the model is fetched at once, alongside three.js and the loader, and parsed when they are in
     const url = CONFIG.model || (HERE + 'heavy_lift_drone_model.glb');
-    const bytes = fetch(url).then(r => { if (!r.ok) throw new Error('model failed to load: ' + url); return r.arrayBuffer(); });
-    return Promise.all([loadThree().then(() => loadScript(CONFIG.loader, () => !!(global.THREE && global.THREE.GLTFLoader))), bytes])
+    // onProgress: the load as it goes, for a page's preloader — { loaded, total (0 = not known), scripts (of 2), built }
+    const report = typeof CONFIG.onProgress === 'function' ? CONFIG.onProgress : null, st = { loaded: 0, total: 0, scripts: 0, built: false };
+    const tell = () => { if (report) try { report(Object.assign({}, st)); } catch (e) { /* the page's problem, not the drone's */ } };
+    const bytes = fetch(url).then(r => {
+      if (!r.ok) throw new Error('model failed to load: ' + url);
+      if (!report || !r.body || !r.body.getReader) return r.arrayBuffer();
+      st.total = +r.headers.get('content-length') || 0;   // a compressed transfer's length is not the body's: dropped below once the body outgrows it
+      const reader = r.body.getReader(), parts = [];
+      const pump = () => reader.read().then(({ done, value }) => {
+        if (done) { const out = new Uint8Array(st.loaded); let o = 0; for (const c of parts) { out.set(c, o); o += c.length; } if (st.total) st.loaded = st.total; tell(); return out.buffer; }
+        parts.push(value); st.loaded += value.length; if (st.total && st.loaded > st.total) st.total = 0; tell(); return pump();
+      });
+      return pump();
+    });
+    const script = () => { st.scripts++; tell(); };
+    return Promise.all([loadThree().then(script).then(() => loadScript(CONFIG.loader, () => !!(global.THREE && global.THREE.GLTFLoader))).then(script), bytes])
       .then(([, buf]) => new Promise((res, rej) => new global.THREE.GLTFLoader().parse(buf, url.replace(/[^/]*$/, ''), res, rej)))
-      .then(gltf => build(host, CONFIG, gltf));
+      .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.19.1' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.20.0' };
 })(typeof window !== 'undefined' ? window : this);

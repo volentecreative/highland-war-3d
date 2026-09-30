@@ -1,0 +1,126 @@
+<!-- The heavy-lift drone as line work (drone-hero.js and the model, HWI's own with the HWI-2207 motor shell,
+     pinned to a commit; the model is fetched alongside three.js, not after it; two of its arms are mirrored
+     copies, which the library turns right side out as it reads them). This canvas sits in
+     .hero-drone_sticky, a viewport-tall sticky holder at the top of .hero-drone_track (the hero pulls itself
+     up over it with a negative top margin), which wraps the hero and the product section: the drone stays
+     pinned behind them while they scroll normally and leaves with the end of the product section. The
+     product section opens with .product_panel, a viewport-tall sticky half-width panel holding the product
+     copy (it takes the place of a spacer between the hero and the product track, so it is pinned in its
+     final place a whole viewport before the path arrives), followed by .product_track (500svh,
+     data-drone-end), the scroll length of the inspection. The panel only resolves into view: opacity 0 to 1
+     and a 4px blur to none, both reading --drone-scroll, the undamped progress the library writes on the
+     track straight from the scroll position, so on a fast scroll up the panel is gone before it unsticks
+     (the damped --drone-progress is there too, for the drone's own timing; the Designer sees the panel
+     resolved). Behind the drone hangs an American flag in the same line work, waving slowly as if in a
+     light breeze and moving in perspective with the camera (flag, placed about the drone's centre); it
+     fades away over the last part of the move (flagFade), and once faded its geometry leaves the scene.
+     At the top of the page the drone is pitched a little nose-down, as if under way (tilt); it levels out
+     over the approach and is flat by the time the product section takes over. It flies a way above the
+     floor grid (floor), so the low arrival view never goes under it. On load the hero copy is centred and
+     the top of the drone shows beneath it (startPoint puts the drone's centre a little under the frame's
+     bottom edge). As the page scrolls the camera moves round and down to beneath the front motor on the
+     camera's left, arriving with the motor shell centred in the left half exactly as the product track
+     reaches the top. The motors start in the secondary colour and turn to the primary over the last part
+     of the move (primaryIn); the panel resolves over that same window. The shell is drawn as modelled,
+     with its slots (normalEdgeMotor lowers the crease threshold on the motors alone so their rounded edges
+     draw; no ribs are generated round it). Then the track's scroll runs the inspection (inspect), one
+     camera curve that never comes to rest until after the last pose: the first quarter is the intro, then
+     a quarter each for 01, 02 and 03, and each stage's move begins with its row's bar and ends with it (a
+     pose is reached as its window ends). Over 01 everything but that motor (its bell, base, shaft, flux
+     ring and filler: everything drawn in the primary colour; the mount under it belongs to the arm)
+     dissolves, quickly at first and then slowly (isolate: the first window; the floor grid stays): the
+     frame is drawn twice, with the rest of the drone and without, and the two are blended, so its lines,
+     its cover of the grid behind it and the motor's outline where its arm crosses it all go at the one rate
+     and nothing pops when it leaves the scene (crossfade); meanwhile the camera drifts a touch further
+     round and up and closes in until the motor fills the left half. Over 02 it turns to the motor's
+     profile from the drone's side, dead level, passed through rather than held. Over 03 it swings on up,
+     further round and a little back out to take in the row: six copies of the motor fade in exactly behind
+     it along the profile's line of sight as that window opens (copies), so they emerge from behind it,
+     each dimmer than the last so the row fades into the distance and off the frame; over that last window
+     the camera's progress is eased out on top of the curve's own flat end, so it comes to rest softly
+     (easeOut). As the scroll reaches each window the library dispatches drone:reach on the matching
+     .product_highlight row (data-inspect="1".."3"; drone:unreach on the way back up past it); the row's
+     copy (.product_highlight-content) no longer waits on it: the site's scramble script resolves it from
+     dimmed cipher glyphs (is-scrambled) to the real text in 400ms as soon as the row is in view, on every
+     breakpoint. In the window
+     the row is active (is-active, and --inspect-active 1 on the row) and its bar fills (--inspect-fill on
+     the row, read by .product_highlight-fill's scaleY). A click on a row scrolls the page to its window
+     (click). The track itself gets drone:arrive / drone:leave as the path arrives and as the scroll takes
+     it back up. Up to 991px wide the inspection runs in its own layout (the library's inspect.steps, on by
+     default there): the approach still follows the scroll, but .product_track is a zero-height marker at
+     the top of the product section (after a viewport of padding on tablets, a fifth of one up to 767px, so
+     the approach on phones is about half as long), so the path arrives as the section reaches the top. Over that approach the lens widens a
+     little (fovNarrow: 30 degrees at the top of the page to 38 at the arrival, held after; the camera keeps
+     its distance, so more of the scene shows by the split view). At the arrival the canvas docks to its
+     top 42% (inspect.dock), at once: the view is only cropped, never reframed (the camera and its
+     perspective do not change; pointNarrow's y, 0.2, centres the motor in the band), and the canvas is
+     resized to the band and takes the page background. There the sticky holder is only the band's height
+     (the canvas inside it is still full height, and the hero pulls up by the band's height), so the band
+     stays pinned until the section's end has passed under it and leaves with it. The copy panel sits a
+     band's height down (margin), with the page background and a border-01 line along its top, and rides
+     over the drone until the arrival; there its top meets the band's bottom exactly, the library puts
+     is-docked on the track, on #hero-drone and on .hero-drone_labels (data-drone-dock), and the page's head
+     code drops the section under the pinned canvas (z-index -1; the sticky holder is pointer-events none so
+     the copy stays tappable) and draws the same line under the band, so the copy scrolls under the band
+     with nothing jumping. .hero-drone_labels, over the band in the sticky holder, holds the product eyebrow
+     at its top left and a dim TALOS at its bottom left, 14px above the seam; it shows up to 991px only,
+     fading in with .is-docked (a combo class), and the intro's own eyebrow (.product_eyebrow-wrapper) is
+     hidden there. Then, with inspect.follow 'scroll' (as now), the camera scrubs with the scroll, damped,
+     reaching each pose as its row's top meets 68% of the viewport (arrival, 01, 02, 03 at the ends of the
+     windows below); the last row past that line is active and its bar fills on the way to the next (a bar
+     alone changing never redraws the canvas). With follow 'tween' (the stepped version, to go back to it
+     delete the follow line) each row crossing that line instead tweens the camera to its pose over a second
+     on a gentle ease and it rests between, back again when the row drops below 78%, and nothing reads the
+     scroll after the arrival. The same classes, bars and drone:reach events as above either way. The
+     propellers' idle turn stops with the approach. The canvas draws a frame only when something visible
+     changes (the scroll, a turning propeller, the flag); once the drone has gone, nothing. On touch devices
+     it renders at a pixel ratio of up to 2 (the docked band at the device's own), with no frame cap, and
+     nothing in the page's layout is touched while it scrolls (the fill is a transform, and written in
+     steps of 0.02 there). The propellers (the model's own tri-blades, their blades lined up so they read as
+     a set) idle very slowly and speed up a little with the scroll. Lines come from a supersampled
+     screen-space edge pass; the rims, flag markings and floor grid are antialiased screen-space quads, so
+     the canvas itself is not multisampled. Colours are the Theme tokens the topo map uses: motors in
+     text-01 at the end, the rest in map-boundary, the grid in text-03.
+     The load feeds the page's preloader (head code): onProgress reports the model's bytes, three.js, the
+     loader and the build, and the mount's promise is tracked, so the preloader lifts once the drone is drawn. -->
+<div id="hero-drone" style="width:100%;height:100%;--topo-block:var(--_theme---background-01);--topo-label:var(--_theme---text-01);--topo-label-secondary:var(--_theme---map-boundary);--drone-grid:var(--_theme---text-03)"></div>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@27bfb97/drone-hero.js"></script>
+<script>
+  var hwPre = window.hwPreloader;
+  var hwDrone = window.DroneHero ? DroneHero.mount('#hero-drone', {
+    onProgress: hwPre && hwPre.drone,     // the preloader's bar follows the real load (drone-hero.js 3.20)
+    focus: 'FR',                          // the motor the path ends on. HWI's model names the arms from the pilot's seat, so FR is the front motor on the camera's left, seen from the front (FL, BR, BL for the others)
+    props: 'model',                       // the model's own tri-blade propellers, turning about their hubs (rather than blades generated in their place)…
+    propPhase: 60,                        // … their blades all starting at this heading (0 = a blade straight back from the opening view; the arms are turned copies in the model, so each is measured and lined up): at 60 they sweep sideways, and none points at the camera, where a blade's pitch reads as a twisted stub over the hub
+    ribs: 0,                              // no ribs generated round the bell: the shell is drawn as modelled…
+    normalEdgeMotor: 0.08,                // … with its slots, whose rounded edges only draw as creases from about this threshold on the motors (the rest of the drone keeps the library's 0.25)
+    tilt: 8,                              // the drone pitched this many degrees nose-down about its centre at the top of the page, as if under way; it levels out over the approach and arrives flat
+    floor: 2,                             // the floor grid this many motor heights below the drone's lowest point, so the low arrival view stays above it
+    track: 'closest:.hero-drone_track',   // the wrapper the canvas stays pinned inside (hero + product sections)
+    runEnd: '[data-drone-end]',           // the path is complete when this element (the product track) reaches the top; drone:arrive / drone:leave are dispatched on it
+    flag: true,                           // the hangar flag behind the drone…
+    flagZ: -60,                           // … this far behind the drone's centre (the camera opens about 16 in front of it)…
+    flagWidth: 52, flagBottom: 16.3,      // … its width, and its bottom edge this far above the drone's centre
+    flagFade: [0.5, 0.85],                // it fades away over this window of the move (flagSway 0.04, flagSeconds 16, flagOpacity 0.85 to tune the wave and markings)
+    startAzimuth: 0, startElevation: 0,   // the start: the whole drone head-on, dead level (but for the tilt)
+    startPoint: { x: 0.5, y: 0.93 },      // … with its centre a little under the frame's bottom edge, so its top (motors, props, the chassis top) shows under the hero copy (1 = on the edge, 1.05 showed nothing of this wide, flat drone)
+    margin: 1,                            // room round the whole drone at the start (1 = its silhouette spans the frame)
+    azimuth: -28, elevation: -14,         // the arrival: round to the camera's left and below the motor, looking up (the inspection drifts on from here)
+    zoom: 0.33,                           // the motor's height as a share of the frame at the arrival (the inspection closes in from here: 0.55 at 01, 0.5 at 02, 0.32 for the row at 03)
+    point:       { x: 0.25, y: 0.46 },    // where the motor shell lands: the centre of the left half, a touch high so the base under it sits centred too
+    pointNarrow: { x: 0.5, y: 0.2 },      // … on screens up to 991px wide: the middle of the docked band (about half of inspect.dock), so the crop keeps it centred (every pose keeps this point there)
+    fovNarrow: 38,                        // … and there the lens widens from 30 degrees at the top of the page to this at the arrival, and holds: the camera keeps its distance, so a little more of the scene shows by the split view (higher = wider)
+    primaryIn: [0.6, 1],                  // the motors go from the secondary colour to white over the last 40% of the approach (the panel resolves in over the same window)
+    propSeconds: 40,                      // the propellers idle at one turn every 40 seconds… (0 = still, which keeps the starting heading)
+    propScroll: 0.12,                     // … and add an eighth of a turn per 1000px scrolled
+    grid: 1, gridExtent: 24,              // the floor grid's cell (motor heights) and how far it reaches from the drone's centre
+    pixelRatioCapCoarse: 2, fpsCoarse: 0,   // touch devices: the canvas's pixel ratio (the docked band goes up to the device's own) and no frame cap (it only draws while something moves); lower either if a phone stutters
+    inspect: {                            // the inspection over the product track's scroll (the poses, isolate, crossfade, copies and easeOut are the library's defaults; see the README to change them)
+      windows: [[0.25, 0.5], [0.5, 0.75], [0.75, 1]],   // of that scroll (500svh): the first quarter the intro, then a quarter each for 01, 02 and 03 — each stage's move fills its quarter, and each row gets drone:reach as its window begins. Up to 991px the states are the ends of these windows
+      follow: 'scroll',                   // up to 991px: the camera scrubs with the scroll, reaching each pose as its row meets the line. To go back to the stepped version (a one-second move per row, still between), delete this line (or set 'tween')
+      dock: 0.42,                         // up to 991px: the band the canvas docks to at the arrival, as a share of its height (keep in step with .hero-drone_sticky's height, .section_hero's top margin and .product_panel's top margin there)
+      click: true                         // a click on a row scrolls the page to its window (up to 991px: brings the row to the trigger line)
+    }
+  }) : Promise.reject(new Error('drone-hero.js did not load'));
+  if (hwPre) hwPre.track('drone', hwDrone);   // the preloader lifts once the drone is drawn (or has failed)
+</script>
