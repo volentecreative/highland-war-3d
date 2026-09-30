@@ -518,3 +518,17 @@ GLTF loader from jsDelivr's copy of three r128 (`loader` overrides). `onProgress
 `{ loaded, total, scripts, built }`: the model's bytes so far and its size (0 when the server does not say, or
 the transfer is compressed), how many of the two scripts (three.js, the loader) are in, and `built` once the drone
 is drawn, so a page's preloader can show real progress; `mount()` itself resolves once the drone is built.
+
+## webflow/: the home-draft page's own code
+
+Readable copies of the custom code on the Webflow page `home-draft`, kept here so changes can be reviewed. They
+are pasted into Webflow by hand (or through the Webflow API); Webflow holds the live copies.
+
+- `home-draft-head.html`: Page settings, custom code, head. The CDN preconnects, the docked-band styles, the
+  rule that hides the band's labels while the mobile menu is open, and the first-visit preloader
+  (`window.hwPreloader`: the drone embed reports its load to it, and the scramble embed waits on `hwPreloader.done`).
+- `embed-hero-drone.html`: the Embed in `.hero-drone_canvas` (drone-hero.js, with `onProgress` wired to the preloader).
+- `embed-scramble.html`: the Embed at the end of the page (scramble.js 2.5, whose runs wait for the preloader).
+
+The site-wide code (Lenis, the theme toggle, the navbar height variable, image focus points and the older
+scramble.js v6) is in Site settings, custom code, and the nav comes from the `narthex` repo.

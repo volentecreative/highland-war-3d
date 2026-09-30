@@ -1,0 +1,154 @@
+<!-- Warm the CDN connections the hero uses: three.js from cdnjs (script), the line-work libraries and drone model from jsDelivr (script + CORS fetch). -->
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+<link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+<!-- Up to 991px the product copy rides over the drone until the drone docks into the band at the top
+     (drone-hero.js puts is-docked on .hero-drone_track and on #hero-drone), then slides under the band.
+     The band keeps the copy's top border as its own bottom line (a shadow, so it adds no height).
+     While the mobile menu is open the band's labels (the eyebrow and the dim TALOS) are hidden, so they never
+     show through the menu's dim over the hero; custom code because the open state is on the navbar, not an
+     ancestor of the labels (:has). -->
+<style>
+  @media (max-width: 991px) {
+    .hero-drone_track.is-docked .section_product { z-index: -1; }
+    #hero-drone.is-docked { box-shadow: 0 1px 0 var(--_theme---border-01); }
+    html:has(.navbar_menu.is-open) .hero-drone_labels { visibility: hidden; }
+  }
+</style>
+<!-- Preloader (first visit in a session only). Custom code because it has to paint before the page does:
+     it is built here in <head> and put straight on <html>, so the Designer never sees it.
+     Progress is real: the drone embed reports its model bytes, three.js, the loader and the build (drone-hero.js
+     onProgress), and the fonts and the images in the first screen count too. It shows for at least 500ms and at
+     most 8s, then fades up and out, unlocks the scroll and has the page re-measure (a resize), and resolves
+     window.hwPreloader.done, which the scramble embed waits on before the hero copy runs.
+     The mark is the logo's own emblem path (from the navbar), drawn as 1.25px strokes, spinning on Y. -->
+<style>
+  #hw-preloader { position: fixed; inset: 0; z-index: 2147483000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2rem;
+    background: var(--_theme---background-01, #222322); color: var(--_theme---text-01, #fcfcfc); touch-action: none;
+    transition: opacity 500ms ease, transform 500ms ease; }
+  #hw-preloader.is-done { opacity: 0; transform: translateY(-1.5rem); pointer-events: none; }
+  .hw-preloader_stage { perspective: 40rem; }
+  .hw-preloader_mark { display: block; width: 4.5rem; height: auto; overflow: visible; animation: hw-preloader-spin 4.8s linear infinite; }
+  .hw-preloader_mark path { fill: none; stroke: currentColor; stroke-width: 1.25px; vector-effect: non-scaling-stroke; stroke-linejoin: miter; }
+  @keyframes hw-preloader-spin { to { transform: rotateY(360deg); } }
+  .hw-preloader_meta { display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
+    font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; font-weight: 500; line-height: 1; letter-spacing: 0.1em; text-transform: uppercase; }
+  .hw-preloader_label { display: flex; justify-content: space-between; width: 9rem; }
+  .hw-preloader_pct { color: var(--_theme---text-03, #a2a2a2); font-variant-numeric: tabular-nums; }
+  .hw-preloader_bar { width: 9rem; height: 1px; overflow: hidden; background: var(--_theme---border-01, #313231); }
+  .hw-preloader_fill { height: 100%; background: currentColor; transform: scaleX(0); transform-origin: 0 50%; }
+  html.hw-preloading, html.hw-preloading body { overflow: hidden; }
+  @media (prefers-reduced-motion: reduce) {
+    .hw-preloader_mark { animation: none; }
+    #hw-preloader { transition: opacity 300ms ease; }
+    #hw-preloader.is-done { transform: none; }
+  }
+</style>
+<script>
+(function () {
+  'use strict';
+  var KEY = 'hw-preloader-seen', MIN = 500, MAX = 8000;
+  var root = document.documentElement, t0 = Date.now();
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var resolveDone, done = new Promise(function (r) { resolveDone = r; });
+  var noop = function () {};
+
+  var seen = false;
+  try { seen = sessionStorage.getItem(KEY) === '1'; } catch (e) {}
+
+  /* The embeds call these whether or not the overlay is showing. */
+  var api = window.hwPreloader = { done: done, report: noop, track: function (n, p) { return p; } };
+  if (seen) { resolveDone(); return; }
+
+  /* ---- the overlay ---- */
+  var el = document.createElement('div');
+  el.id = 'hw-preloader';
+  el.setAttribute('role', 'progressbar');
+  el.setAttribute('aria-label', 'Loading');
+  el.setAttribute('aria-valuemin', '0');
+  el.setAttribute('aria-valuemax', '100');
+  el.innerHTML =
+    '<div class="hw-preloader_stage"><svg class="hw-preloader_mark" viewBox="-1 -1 83 84" aria-hidden="true"><path d="' +
+    'M46.5 0H28.66V8.5H36.07V36.82H44.58V8.5H48L51.98 11.83V4.59L46.51 0H46.5Z' +
+    'M76.37 2.34H71.7L51.96 18.87V64.21L60.46 71.32V22.82L67.86 16.64V64.9L76.36 57.75V9.19L80.61 5.9L76.36 2.34H76.37Z' +
+    'M0 5.9L4.25 9.19V57.74L12.75 64.89V16.63L20.15 22.81V71.3L28.65 64.19V18.87L8.92 2.34H4.25L0 5.9Z' +
+    'M44.57 44.23H36.06V67.65L26.04 76.04L31.97 80.97H48.65L54.58 76.04L44.56 67.67V44.24L44.57 44.23Z' +
+    '"/></svg></div>' +
+    '<div class="hw-preloader_meta"><div class="hw-preloader_label"><span>Loading</span><span class="hw-preloader_pct">0%</span></div>' +
+    '<div class="hw-preloader_bar"><div class="hw-preloader_fill"></div></div></div>';
+  root.appendChild(el);
+  root.classList.add('hw-preloading');
+  var fill = el.querySelector('.hw-preloader_fill'), pct = el.querySelector('.hw-preloader_pct');
+  var stop = function (e) { e.preventDefault(); };
+  el.addEventListener('wheel', stop, { passive: false });
+  el.addEventListener('touchmove', stop, { passive: false });
+
+  /* ---- progress: named sources, each 0..1, weighted ---- */
+  var W = { fonts: 0.1, images: 0.15, drone: 0.75 }, parts = {}, pending = {}, closed = false, finished = false;
+  function set(name, f) { parts[name] = Math.max(parts[name] || 0, Math.min(1, f)); }
+  function real() { var s = 0, w = 0; for (var k in pending) { w += W[k] || 0.1; s += (W[k] || 0.1) * (parts[k] || 0); } return w ? s / w : 0; }
+  function settle(name) { set(name, 1); delete pending[name]; check(); }
+  api.track = function (name, p) { pending[name] = true; parts[name] = parts[name] || 0; Promise.resolve(p).then(function () { settle(name); }, function () { settle(name); }); return p; };
+  api.report = function (name, f) { if (pending[name]) set(name, f); };
+
+  /* the drone: drone-hero.js's onProgress state -> 0..1 (scripts 15%, model bytes 75%, build 10%). Without a
+     size from the server the bytes count against the model's known size, and never past 90% of their share. */
+  api.drone = function (s) {
+    var b = s.total ? s.loaded / s.total : Math.min(0.9, s.loaded / 2651372);
+    api.report('drone', (s.scripts / 2) * 0.15 + b * 0.75 + (s.built ? 0.1 : 0));
+  };
+
+  api.track('fonts', document.fonts && document.fonts.ready ? document.fonts.ready : null);
+
+  /* the images in the first screen, once the DOM is in; the embeds have registered by then */
+  function onDom() {
+    var imgs = [].filter.call(document.images, function (i) { var r = i.getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0 && r.width > 0; });
+    var left = imgs.filter(function (i) { return !i.complete; });
+    var n = left.length;
+    api.track('images', new Promise(function (res) {
+      if (!n) return res();
+      var got = 0;
+      left.forEach(function (i) { var one = function () { got++; set('images', got / n); if (got >= n) res(); }; i.addEventListener('load', one, { once: true }); i.addEventListener('error', one, { once: true }); });
+    }));
+    try { if (typeof lenis !== 'undefined' && lenis.stop) lenis.stop(); } catch (e) {}
+    closed = true; check();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', onDom); else onDom();
+
+  /* ---- the bar, eased toward the real value ---- */
+  var shown = 0;
+  function paint() {
+    if (!el) return;
+    var target = finished ? 1 : Math.min(0.99, real());
+    shown += (target - shown) * (reduced ? 1 : 0.18);
+    if (target - shown < 0.002) shown = target;
+    fill.style.transform = 'scaleX(' + shown.toFixed(3) + ')';
+    var p = Math.round(shown * 100);
+    pct.textContent = p + '%';
+    el.setAttribute('aria-valuenow', String(p));
+    requestAnimationFrame(paint);
+  }
+  requestAnimationFrame(paint);
+
+  function check() { if (!finished && closed && !Object.keys(pending).length) finish(); }
+  function finish() {
+    if (finished) return; finished = true;
+    setTimeout(hide, Math.max(0, MIN - (Date.now() - t0)) + (reduced ? 0 : 200));   // the extra 200ms lets the bar reach 100%
+  }
+  var failsafe = setTimeout(function () { finished = true; hide(); }, MAX);
+
+  var hidden = false;
+  function hide() {
+    if (hidden) return; hidden = true; clearTimeout(failsafe);
+    try { sessionStorage.setItem(KEY, '1'); } catch (e) {}
+    root.classList.remove('hw-preloading');
+    try { if (typeof lenis !== 'undefined') { if (lenis.start) lenis.start(); if (lenis.resize) lenis.resize(); } } catch (e) {}
+    window.dispatchEvent(new Event('resize'));   // the scroll-driven scenes and sticky tracks re-measure with the scrollbar back
+    el.classList.add('is-done');
+    resolveDone();
+    setTimeout(function () { if (el && el.parentNode) el.parentNode.removeChild(el); el = null; }, reduced ? 300 : 500);
+  }
+})();
+</script>
