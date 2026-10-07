@@ -18,13 +18,21 @@
     html:has(.navbar_menu.is-open) .hero-drone_labels { visibility: hidden; }
   }
 </style>
-<!-- Preloader (first visit in a session only). Custom code because it has to paint before the page does:
-     it is built here in <head> and put straight on <html>, so the Designer never sees it.
+<!-- Load gate (every load) and preloader (first visit in a session). Custom code because it has to act before the
+     page paints: it is built here in <head> and put straight on <html>, so the Designer never sees it.
+     The drone is part of the scroll choreography, so the page is never scrollable before it is drawn: on every load
+     (a reload too) the browser's scroll restoration is off and the page starts at the top, the scroll is locked, and
+     the hero copy is held back (hw-gate), while the page is laid out underneath with the drone's poster frame (a
+     still of its first frame without the flag, in the drone embed) in the canvas's place. Once the drone is drawn (and the fonts are
+     in), the scroll unlocks, every scroll scene re-measures (a resize; Lenis too), and two frames later the poster
+     fades into the live canvas and the hero copy fades in and deciphers (window.hwPreloader.done, which the scramble
+     embed waits on); a link to an #anchor on this page is followed then.
+     First visit in a session: the full preloader below (the Highland mark spinning, a real progress bar), shown for
+     at least 500ms. Every other load: nothing is shown at all unless the drone takes more than 300ms, and then only a
+     small spinning mark and bar at the foot of the screen; from the cache the gate lifts before it can be noticed.
+     Either way the gate gives up after 8s (the poster then stays as the drone's stand-in if it failed).
      Progress is real: the drone embed reports its model bytes, three.js, the loader and the build (drone-hero.js
-     onProgress), and the fonts and the images in the first screen count too. It shows for at least 500ms and at
-     most 8s, then fades up and out, unlocks the scroll and has the page re-measure (a resize), and resolves
-     window.hwPreloader.done, which the scramble embed waits on before the hero copy runs.
-     The mark is the logo's own emblem path (from the navbar), drawn as 1.25px strokes, spinning on Y. -->
+     onProgress), and the fonts and the images in the first screen count too. -->
 <style>
   #hw-preloader { position: fixed; inset: 0; z-index: 2147483000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2rem;
     background: var(--_theme---background-01, #222322); color: var(--_theme---text-01, #fcfcfc); touch-action: none;
@@ -40,7 +48,20 @@
   .hw-preloader_pct { color: var(--_theme---text-03, #a2a2a2); font-variant-numeric: tabular-nums; }
   .hw-preloader_bar { width: 9rem; height: 1px; overflow: hidden; background: var(--_theme---border-01, #313231); }
   .hw-preloader_fill { height: 100%; background: currentColor; transform: scaleX(0); transform-origin: 0 50%; }
+  /* the quiet gate's indicator: a small mark and bar at the foot of the screen, faded in only after 300ms */
+  #hw-gate { position: fixed; left: 50%; bottom: 2rem; z-index: 2147483000; display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
+    color: var(--_theme---text-01, #fcfcfc); transform: translateX(-50%); opacity: 0; pointer-events: none; transition: opacity 250ms ease; }
+  #hw-gate.is-shown { opacity: 1; }
+  #hw-gate .hw-preloader_mark { width: 1.75rem; }
+  #hw-gate .hw-preloader_bar { width: 3rem; }
   html.hw-preloading, html.hw-preloading body { overflow: hidden; }
+  /* while the gate is up the hero copy waits, so it arrives with the drone; the poster under it is in the drone embed */
+  .hero_copy { transition: opacity 300ms ease; }
+  html.hw-gate .hero_copy { opacity: 0; }
+  .hw-drone-poster { position: absolute; inset: 0; overflow: hidden; pointer-events: none; transition: opacity 250ms ease; }
+  .hw-drone-poster img { position: absolute; display: block; height: auto; max-width: none; top: 93%; left: 3.368%; width: 93.264%; margin-top: -8.724%; }
+  .hw-drone-poster img.is-narrow { left: 0; width: 100%; margin-top: -14.934%; }
+  html.hw-drone-live .hw-drone-poster { opacity: 0; }
   @media (prefers-reduced-motion: reduce) {
     .hw-preloader_mark { animation: none; }
     #hw-preloader { transition: opacity 300ms ease; }
@@ -50,54 +71,62 @@
 <script>
 (function () {
   'use strict';
-  var KEY = 'hw-preloader-seen', MIN = 500, MAX = 8000;
+  var KEY = 'hw-preloader-seen', MIN = 500, MAX = 8000, QUIET = 300;
   var root = document.documentElement, t0 = Date.now();
   var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var resolveDone, done = new Promise(function (r) { resolveDone = r; });
-  var noop = function () {};
+
+  /* every load starts at the top, whatever the browser remembers; a #anchor is followed once the gate lifts */
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  var hash = location.hash && location.hash.length > 1 ? location.hash : '';
+  if (hash) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} }   // so the browser does not jump there now
+  window.scrollTo(0, 0);
 
   var seen = false;
   try { seen = sessionStorage.getItem(KEY) === '1'; } catch (e) {}
 
-  /* The embeds call these whether or not the overlay is showing. */
-  var api = window.hwPreloader = { done: done, report: noop, track: function (n, p) { return p; } };
-  if (seen) { resolveDone(); return; }
+  var api = window.hwPreloader = { done: done, report: function () {}, track: function (n, p) { return p; } };
+  root.classList.add('hw-preloading', 'hw-gate');
+  var block = function (e) { e.preventDefault(); };
+  document.addEventListener('touchmove', block, { passive: false });   // iOS can still scroll an overflow:hidden page by touch
+  document.addEventListener('wheel', block, { passive: false });
 
-  /* ---- the overlay ---- */
-  var el = document.createElement('div');
-  el.id = 'hw-preloader';
-  el.setAttribute('role', 'progressbar');
-  el.setAttribute('aria-label', 'Loading');
-  el.setAttribute('aria-valuemin', '0');
-  el.setAttribute('aria-valuemax', '100');
-  el.innerHTML =
-    '<div class="hw-preloader_stage"><svg class="hw-preloader_mark" viewBox="-1 -1 83 84" aria-hidden="true"><path d="' +
+  /* ---- what shows: the full overlay on a first visit, a small indicator (after 300ms) otherwise ---- */
+  var MARK = '<svg class="hw-preloader_mark" viewBox="-1 -1 83 84" aria-hidden="true"><path d="' +
     'M46.5 0H28.66V8.5H36.07V36.82H44.58V8.5H48L51.98 11.83V4.59L46.51 0H46.5Z' +
     'M76.37 2.34H71.7L51.96 18.87V64.21L60.46 71.32V22.82L67.86 16.64V64.9L76.36 57.75V9.19L80.61 5.9L76.36 2.34H76.37Z' +
     'M0 5.9L4.25 9.19V57.74L12.75 64.89V16.63L20.15 22.81V71.3L28.65 64.19V18.87L8.92 2.34H4.25L0 5.9Z' +
     'M44.57 44.23H36.06V67.65L26.04 76.04L31.97 80.97H48.65L54.58 76.04L44.56 67.67V44.24L44.57 44.23Z' +
-    '"/></svg></div>' +
-    '<div class="hw-preloader_meta"><div class="hw-preloader_label"><span>Loading</span><span class="hw-preloader_pct">0%</span></div>' +
-    '<div class="hw-preloader_bar"><div class="hw-preloader_fill"></div></div></div>';
+    '"/></svg>';
+  var el = document.createElement('div'), pct = null;
+  el.setAttribute('role', 'progressbar'); el.setAttribute('aria-label', 'Loading'); el.setAttribute('aria-valuemin', '0'); el.setAttribute('aria-valuemax', '100');
+  if (!seen) {
+    el.id = 'hw-preloader';
+    el.innerHTML = '<div class="hw-preloader_stage">' + MARK + '</div>' +
+      '<div class="hw-preloader_meta"><div class="hw-preloader_label"><span>Loading</span><span class="hw-preloader_pct">0%</span></div>' +
+      '<div class="hw-preloader_bar"><div class="hw-preloader_fill"></div></div></div>';
+    pct = el.querySelector('.hw-preloader_pct');
+  } else {
+    el.id = 'hw-gate';
+    el.innerHTML = '<div class="hw-preloader_stage">' + MARK + '</div><div class="hw-preloader_bar"><div class="hw-preloader_fill"></div></div>';
+    setTimeout(function () { if (el && !finished) el.classList.add('is-shown'); }, QUIET);
+  }
   root.appendChild(el);
-  root.classList.add('hw-preloading');
-  var fill = el.querySelector('.hw-preloader_fill'), pct = el.querySelector('.hw-preloader_pct');
-  var stop = function (e) { e.preventDefault(); };
-  el.addEventListener('wheel', stop, { passive: false });
-  el.addEventListener('touchmove', stop, { passive: false });
+  var fill = el.querySelector('.hw-preloader_fill');
 
   /* ---- progress: named sources, each 0..1, weighted ---- */
-  var W = { fonts: 0.1, images: 0.15, drone: 0.75 }, parts = {}, pending = {}, closed = false, finished = false;
+  var W = { fonts: 0.1, images: 0.15, drone: 0.75 }, parts = {}, pending = {}, closed = false, finished = false, droneOk = true;
   function set(name, f) { parts[name] = Math.max(parts[name] || 0, Math.min(1, f)); }
   function real() { var s = 0, w = 0; for (var k in pending) { w += W[k] || 0.1; s += (W[k] || 0.1) * (parts[k] || 0); } return w ? s / w : 0; }
   function settle(name) { set(name, 1); delete pending[name]; check(); }
-  api.track = function (name, p) { pending[name] = true; parts[name] = parts[name] || 0; Promise.resolve(p).then(function () { settle(name); }, function () { settle(name); }); return p; };
+  api.track = function (name, p) { pending[name] = true; parts[name] = parts[name] || 0;
+    Promise.resolve(p).then(function () { settle(name); }, function () { if (name === 'drone') droneOk = false; settle(name); }); return p; };
   api.report = function (name, f) { if (pending[name]) set(name, f); };
 
   /* the drone: drone-hero.js's onProgress state -> 0..1 (scripts 15%, model bytes 75%, build 10%). Without a
-     size from the server the bytes count against the model's known size, and never past 90% of their share. */
+     size from the server the bytes count against the model's known size (the meshopt file), never past 90% of their share. */
   api.drone = function (s) {
-    var b = s.total ? s.loaded / s.total : Math.min(0.9, s.loaded / 2651372);
+    var b = s.total ? s.loaded / s.total : Math.min(0.9, s.loaded / 341568);
     api.report('drone', (s.scripts / 2) * 0.15 + b * 0.75 + (s.built ? 0.1 : 0));
   };
 
@@ -105,6 +134,7 @@
 
   /* the images in the first screen, once the DOM is in; the embeds have registered by then */
   function onDom() {
+    if (!hash) window.scrollTo(0, 0);
     var imgs = [].filter.call(document.images, function (i) { var r = i.getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0 && r.width > 0; });
     var left = imgs.filter(function (i) { return !i.complete; });
     var n = left.length;
@@ -127,7 +157,7 @@
     if (target - shown < 0.002) shown = target;
     fill.style.transform = 'scaleX(' + shown.toFixed(3) + ')';
     var p = Math.round(shown * 100);
-    pct.textContent = p + '%';
+    if (pct) pct.textContent = p + '%';
     el.setAttribute('aria-valuenow', String(p));
     requestAnimationFrame(paint);
   }
@@ -136,20 +166,36 @@
   function check() { if (!finished && closed && !Object.keys(pending).length) finish(); }
   function finish() {
     if (finished) return; finished = true;
-    setTimeout(hide, Math.max(0, MIN - (Date.now() - t0)) + (reduced ? 0 : 200));   // the extra 200ms lets the bar reach 100%
+    var wait = seen ? 0 : Math.max(0, MIN - (Date.now() - t0)) + (reduced ? 0 : 200);   // first visit: at least 500ms, and 200ms for the bar to reach 100%
+    setTimeout(lift, wait);
   }
-  var failsafe = setTimeout(function () { finished = true; hide(); }, MAX);
+  var failsafe = setTimeout(function () { finished = true; lift(); }, MAX);
 
-  var hidden = false;
-  function hide() {
-    if (hidden) return; hidden = true; clearTimeout(failsafe);
+  var lifted = false;
+  function lift() {
+    if (lifted) return; lifted = true; clearTimeout(failsafe);
     try { sessionStorage.setItem(KEY, '1'); } catch (e) {}
+    if (!hash) window.scrollTo(0, 0);
+    /* unlock, then have every scroll scene re-measure with the scrollbar back (the drone, the topo map, the sticky tracks, Lenis) */
     root.classList.remove('hw-preloading');
-    try { if (typeof lenis !== 'undefined') { if (lenis.start) lenis.start(); if (lenis.resize) lenis.resize(); } } catch (e) {}
-    window.dispatchEvent(new Event('resize'));   // the scroll-driven scenes and sticky tracks re-measure with the scrollbar back
-    el.classList.add('is-done');
-    resolveDone();
-    setTimeout(function () { if (el && el.parentNode) el.parentNode.removeChild(el); el = null; }, reduced ? 300 : 500);
+    document.removeEventListener('touchmove', block); document.removeEventListener('wheel', block);
+    try { if (typeof lenis !== 'undefined') { if (lenis.resize) lenis.resize(); if (lenis.start) lenis.start(); } } catch (e) {}
+    window.dispatchEvent(new Event('resize'));
+    requestAnimationFrame(function () { requestAnimationFrame(function () {
+      if (droneOk) root.classList.add('hw-drone-live');   // the poster fades into the live canvas (a failed drone keeps its poster)
+      root.classList.remove('hw-gate');                    // the hero copy fades in…
+      resolveDone();                                       // … and deciphers
+      if (el) { el.classList.add('is-done'); el.classList.remove('is-shown'); }
+      setTimeout(function () {
+        if (el && el.parentNode) el.parentNode.removeChild(el); el = null;
+        if (droneOk) { var p = document.querySelector('.hw-drone-poster'); if (p && p.parentNode) p.parentNode.removeChild(p); }
+      }, 500);
+      if (hash) {
+        try { history.replaceState(null, '', location.pathname + location.search + hash); } catch (e) {}
+        var t = null; try { t = document.querySelector(hash); } catch (e) {}
+        if (t) { try { if (typeof lenis !== 'undefined' && lenis.scrollTo) lenis.scrollTo(t, { immediate: true }); else t.scrollIntoView(); } catch (e) { t.scrollIntoView(); } }
+      }
+    }); });
   }
 })();
 </script>
