@@ -92,7 +92,8 @@
      text-01 at the end, the rest in map-boundary, the grid in text-03.
      The load feeds the page's load gate (head code): onProgress reports the model's bytes, three.js, the
      loader and the build, and the mount's promise is tracked, so the gate lifts once the drone is drawn; until then
-     the poster frame below stands in for it. -->
+     the poster frame below stands in for it. On phones the docked part of the sequence is not drawn live at all
+     once its frames are in: it plays from pre-rendered frames (sequence), scrubbed by the same scroll. -->
 <div id="hero-drone" style="width:100%;height:100%;--topo-block:var(--_theme---background-01);--topo-label:var(--_theme---text-01);--topo-label-secondary:var(--_theme---map-boundary);--drone-grid:var(--_theme---text-03)"></div>
 <!-- The poster frame: a still of the drone's first frame, the drone alone (posters/ in the repo, one per layout and theme, chosen here
      before it paints), over the canvas while the page's load gate is up; it fades into the live canvas (the flag fades in with it) when the gate
@@ -106,7 +107,7 @@
     img.src = 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@f269731/posters/drone-start-' + (n ? 'narrow' : 'wide') + '-' + t + '.webp';
   })();
 </script>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@3abcee5/drone-hero.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@5b5e59e/drone-hero.js"></script>
 <script>
   var hwPre = window.hwPreloader;
   // up to 991px (the narrow layout) the drone is set up once, at load: no idle propeller turn (the props only
@@ -143,6 +144,11 @@
     grid: 1, gridExtent: 24,              // the floor grid's cell (motor heights) and how far it reaches from the drone's centre
     pixelRatioCapCoarse: 2, fpsCoarse: 0,   // touch devices: the canvas's pixel ratio (the docked band goes up to the device's own) and no frame cap (it only draws while something moves); lower either if a phone stutters
     flagFpsCoarse: 0,                     // touch devices: the flag waves every frame, as on desktop (drone-hero.js 3.21+; 30 would step it at 30 a second)
+    sequence: {                           // up to 991px, while docked: the inspection is drawn from 120 pre-rendered frames instead of the live 3D (drone-hero.js 3.25)…
+      url: 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@5b5e59e/seq/{theme}/{i}.webp', frames: 120, pad: 3,   // … rendered from this scene at 390x844 @3x, one set per theme (about 2.6 MB, only the current theme's is fetched)…
+      maxWidth: 560, aspect: [0.9, 1.7],  // … on phones only: wider bands (tablets) keep the live scene…
+      after: hwPre && hwPre.done          // … fetched once the load gate has lifted, in idle time; until they are all in, the live scene draws
+    },
     inspect: {                            // the inspection over the product track's scroll (the poses, isolate, crossfade, copies and easeOut are the library's defaults; see the README to change them)
       windows: [[0.25, 0.5], [0.5, 0.75], [0.75, 1]],   // of that scroll (500svh): the first quarter the intro, then a quarter each for 01, 02 and 03 — each stage's move fills its quarter, and each row gets drone:reach as its window begins. Up to 991px each row plays its own window while it is the active one
       follow: 'scroll',                   // up to 991px: the camera scrubs with the scroll, each stage playing while its row is the active one. To go back to the stepped version (a one-second move per row, still between), delete this line (or set 'tween')

@@ -1,0 +1,37 @@
+<!-- The alternate product section's drone (up to 991px only; .section_product-alt is hidden above that). A trial of a
+     non-sticky layout, below the sticky one, to compare on phones. drone-hero.js in showcase mode (3.25): no scroll
+     path; the band holds the arrival view (the motor from below, the rest of the drone round it) and, once the band is
+     60% on screen, the rest of the drone dissolves behind the motor as the camera rises to an isometric view over 2.4s,
+     then the camera orbits the motor slowly (a turn every 40s) for as long as the band is on screen. Nothing else is
+     tied to the scroll; the claims below come in with the cipher as they scroll into view.
+     The library and the model are the hero's (the model comes from the browser's cache); this one is mounted only once
+     the band is within a screen of view, so it costs the page's load nothing, and only up to 991px. -->
+<div id="product-alt-drone" style="position:absolute;inset:0;--topo-block:var(--_theme---background-01);--topo-label:var(--_theme---text-01);--topo-label-secondary:var(--_theme---map-boundary);--drone-grid:var(--_theme---text-03)"></div>
+<script>
+  (function () {
+    var host = document.getElementById('product-alt-drone');
+    if (!host || !matchMedia('(max-width: 991px)').matches) return;
+    var go = function () {
+      if (!window.DroneHero) return;
+      DroneHero.mount(host, {
+        model: 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@be27eae/heavy_lift_drone_model.meshopt.glb',
+        focus: 'FR', props: 'model', propPhase: 60, ribs: 0, normalEdgeMotor: 0.08,
+        floor: 2, flag: false, tilt: 0, propSeconds: 0, propScroll: 0,
+        azimuth: -28, elevation: -14,          // the arrival view, as the hero's: under the motor, looking up
+        zoom: 0.5,                              // the motor's height as a share of the band
+        point: { x: 0.5, y: 0.55 }, pointNarrow: { x: 0.5, y: 0.55 },
+        pixelRatioCapCoarse: 2, fpsCoarse: 0,
+        showcase: {
+          pose: { azimuth: -45, elevation: 32, zoom: 0.46, zoomNarrow: 0.46 },   // the isometric view it rises to
+          isolate: [0, 0.6],                    // the rest of the drone is gone by 60% of the move
+          duration: 2400, delay: 150,
+          orbitSeconds: 40,                     // then one slow turn round the motor every 40s
+          threshold: 0.6                        // starts once the band is 60% on screen
+        }
+      });
+    };
+    if (!('IntersectionObserver' in window)) return go();
+    var io = new IntersectionObserver(function (en) { if (en[0].isIntersecting) { io.disconnect(); go(); } }, { rootMargin: '100% 0px' });
+    io.observe(host);
+  })();
+</script>
