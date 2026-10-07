@@ -48,8 +48,8 @@
      (click). The track itself gets drone:arrive / drone:leave as the path arrives and as the scroll takes
      it back up. Up to 991px wide the inspection runs in its own layout (the library's inspect.steps, on by
      default there): the approach still follows the scroll, but .product_track is a zero-height marker at
-     the top of the product section (after a viewport of padding on tablets, a fifth of one up to 767px, so
-     the approach on phones is about half as long), so the path arrives as the section reaches the top. Over that approach the lens widens a
+     the top of the product section (after a fifth of a viewport of
+     padding, on tablets and phones alike), so the path arrives as the section reaches the top. Over that approach the lens widens a
      little (fovNarrow: 30 degrees at the top of the page to 38 at the arrival, held after; the camera keeps
      its distance, so more of the scene shows by the split view). At the arrival the canvas docks to its
      top 42% (inspect.dock), at once: the view is only cropped, never reframed (the camera and its
@@ -65,7 +65,13 @@
      with nothing jumping. .hero-drone_labels, over the band in the sticky holder, holds the product eyebrow
      at its top left and a dim TALOS at its bottom left, 14px above the seam; it shows up to 991px only,
      fading in with .is-docked (a combo class), and the intro's own eyebrow (.product_eyebrow-wrapper) is
-     hidden there. Then, with inspect.follow 'scroll' (as now), the camera scrubs with the scroll, damped,
+     hidden there. Up to 991px the inspection is one restrained move, not three states: its three poses are points
+     on a single arc round the motor (no isolate, no row of copies), so the camera orbits slowly as the claims pass
+     in a tight stack; a 3rem fade (.hero-drone_fade, data-drone-dock, shown only while docked) softens the band's
+     bottom edge so the copy dissolves under it rather than being sliced; the spec strip (.product_spec-list,
+     narrow only), the Request Spec Sheet button and the concept label follow the claims, and the band lets go
+     with the section's end, straight into Purpose. Desktop keeps the three states described above.
+     Then, with inspect.follow 'scroll' (as now), the camera scrubs with the scroll, damped,
      reaching each pose as its row's top meets 68% of the viewport (arrival, 01, 02, 03 at the ends of the
      windows below); the last row past that line is active and its bar fills on the way to the next (a bar
      alone changing never redraws the canvas). With follow 'tween' (the stepped version, to go back to it
@@ -122,14 +128,24 @@
     pixelRatioCapCoarse: 1.5, fpsCoarse: 0,   // touch devices: the canvas's pixel ratio, and no frame cap (it only draws while something moves, so the scroll scrubs at the screen's rate)
     supersample: hwCoarse ? 1.25 : 2,     // the edge pass's supersampling: 2x on desktop; 1.25x on touch devices, about a third of the fill of 2x and still antialiased
     flagFpsCoarse: 30,                    // touch devices: the flag's wave steps at 30 a second (drone-hero.js 3.21+)
-    inspect: {                            // the inspection over the product track's scroll (the poses, isolate, crossfade, copies and easeOut are the library's defaults; see the README to change them)
+    inspect: Object.assign({              // the inspection over the product track's scroll (on desktop the poses, isolate, crossfade, copies and easeOut are the library's defaults; see the README to change them)
       windows: [[0.25, 0.5], [0.5, 0.75], [0.75, 1]],   // of that scroll (500svh): the first quarter the intro, then a quarter each for 01, 02 and 03 — each stage's move fills its quarter, and each row gets drone:reach as its window begins. Up to 991px the states are the ends of these windows
       follow: 'scroll',                   // up to 991px: the camera scrubs with the scroll, reaching each pose as its row meets the line. To go back to the stepped version (a one-second move per row, still between), delete this line (or set 'tween')
       dockPixelRatio: 2,                  // the docked band's pixel ratio (the library's 3 drew as many pixels as the whole canvas)
       crossfade: !hwCoarse,               // touch devices: the rest of the drone fades by its lines' alpha instead of drawing every frame twice
       dock: 0.42,                         // up to 991px: the band the canvas docks to at the arrival, as a share of its height (keep in step with .hero-drone_sticky's height, .section_hero's top margin and .product_panel's top margin there)
       click: true                         // a click on a row scrolls the page to its window (up to 991px: brings the row to the trigger line)
-    }
+    }, hwNarrow ? {                       // up to 991px: one restrained move instead of three states. The three poses are points on a single arc round the
+                                          // motor (a little further round and up at each claim, the size all but unchanged), so the camera makes one slow
+                                          // orbit as the claims scroll past; the rest of the drone stays (no isolate) and no row of copies
+      poses: [
+        { azimuth: -40, elevation: -10, zoom: 0.33, zoomNarrow: 0.34 },
+        { azimuth: -52, elevation: -6,  zoom: 0.33, zoomNarrow: 0.35 },
+        { azimuth: -64, elevation: -2,  zoom: 0.33, zoomNarrow: 0.36 }
+      ],
+      isolate: false,
+      copies: { count: 0 }
+    } : {})
   }) : Promise.reject(new Error('drone-hero.js did not load'));
   if (hwPre) hwPre.track('drone', hwDrone);   // the preloader lifts once the drone is drawn (or has failed)
 </script>
