@@ -36,6 +36,7 @@
   const DEFAULTS = {
     model: '',                 // URL of the GLB; '' = heavy_lift_drone_model.glb beside this script
     loader: 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js',
+    meshopt: 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/meshopt_decoder.js',   // the decoder for a meshopt-compressed model (EXT_meshopt_compression, as heavy_lift_drone_model.glb is); fetched alongside three.js. '' = none (an uncompressed model)
     onProgress: null,          // function({ loaded, total, scripts, built }): called as the model's bytes, three.js and the loader come in and once the drone is built (total 0 = the size is not known), for a page's preloader
     focus: 'FL',               // which motor the path ends on: FR, FL, BR, BL, or with ' 2' for the lower ring of the coaxial pairs
     track: '',                 // the tall section the canvas is pinned inside ('closest:.section_hero', a selector, or an element); the camera's path runs over its scroll. '' = hold the end view
@@ -847,9 +848,10 @@
       return pump();
     });
     const script = () => { st.scripts++; tell(); };
-    return Promise.all([loadThree().then(script).then(() => loadScript(CONFIG.loader, () => !!(global.THREE && global.THREE.GLTFLoader))).then(script), bytes])
-      .then(([, buf]) => new Promise((res, rej) => new global.THREE.GLTFLoader().parse(buf, url.replace(/[^/]*$/, ''), res, rej)))
+    const decoder = CONFIG.meshopt ? loadScript(CONFIG.meshopt, () => !!global.MeshoptDecoder) : Promise.resolve();   // standalone, so it comes in with three.js rather than after it
+    return Promise.all([loadThree().then(script).then(() => loadScript(CONFIG.loader, () => !!(global.THREE && global.THREE.GLTFLoader))).then(script), bytes, decoder])
+      .then(([, buf]) => new Promise((res, rej) => { const ld = new global.THREE.GLTFLoader(); if (global.MeshoptDecoder) ld.setMeshoptDecoder(global.MeshoptDecoder); ld.parse(buf, url.replace(/[^/]*$/, ''), res, rej); }))
       .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.22.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.23.0' };
 })(typeof window !== 'undefined' ? window : this);
