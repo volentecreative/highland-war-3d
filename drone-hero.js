@@ -100,7 +100,8 @@
     msaa: false,               // multisampling on the canvas itself; the lines have their own antialiasing (the edge pass's supersampling, the quads' coverage) so it changes nothing visible and costs fill on every frame
     // on touch devices (a coarse pointer) the work per frame is cut: the canvas at a lower pixel ratio, and at most this many frames a second
     pixelRatioCapCoarse: 1.5,
-    fpsCoarse: 30
+    fpsCoarse: 30,
+    flagFpsCoarse: 30          // on touch devices the flag's wave (rebuilt on the CPU) steps at most this many times a second; 0 = every frame
   };
   const COLOR_KEYS = ['primary', 'secondary', 'gridColor', 'face', 'background'];
   const INSPECT = {
@@ -488,7 +489,8 @@
     // styles, and on phones a style change round a sticky element can make it re-sync mid-scroll — so not up to `breakpoint`
     // (a caller can pass narrowToo to write one anyway, in steps of 0.02)
     const varLast = {}; const setVar = (name, v, dp, narrowToo) => { if (!name) return; const narrow = isNarrow(); if (narrow && !narrowToo) return; const s = narrow ? (Math.round(v * 50) / 50).toFixed(2) : v.toFixed(dp || 2); if (varLast[name] === s) return; varLast[name] = s; host.style.setProperty(name, s); if (trackEl) trackEl.style.setProperty(name, s); };
-    const isNarrow = () => !!(global.matchMedia && global.matchMedia('(max-width: ' + (+CONFIG.breakpoint || 991) + 'px)').matches);
+    let narrowMQ = null, narrowBp = 0;   // one MediaQueryList, kept (it is read on every scroll), remade only if `breakpoint` changes
+    const isNarrow = () => { const bp = +CONFIG.breakpoint || 991; if (!global.matchMedia) return false; if (bp !== narrowBp) { narrowBp = bp; narrowMQ = global.matchMedia('(max-width: ' + bp + 'px)'); } return narrowMQ.matches; };
     const endPoint = () => (isNarrow() && CONFIG.pointNarrow) || CONFIG.point || { x: 0.5, y: 0.5 };
     const zoomDist = z => motorH / (2 * Math.tan((+CONFIG.fov || 30) * D2R / 2) * Math.max(0.05, z || 0.36));   // a share of the full canvas's height, docked or not
     // the camera at a heading (radians) and distance from camTarget, with the target at (px, py) of the frame
@@ -751,7 +753,7 @@
       quad.material = mixMat; setQuad(-1, -1, 1, 1); renderer.setRenderTarget(null); renderer.clear(); renderer.render(quadScene, quadCam); quad.material = edgeMat;
     }
     // ---- the loop: the camera follows the scroll through the track, damped; the props turn with the scroll
-    let dirty = true, alive = true, visible = true, lastT = performance.now(), spin = 0, spinTarget = 0, idle = 0, flagT = 0, raf = 0, inTick = false;
+    let dirty = true, alive = true, visible = true, lastT = performance.now(), spin = 0, spinTarget = 0, idle = 0, flagT = 0, flagLast = 0, raf = 0, inTick = false;
     // frames are asked for only while something moves: a scroll to follow, a state's move, the dock, the props or the flag; at rest there is no loop at all
     const wake = () => { if (raf || !alive) return; if (!inTick) lastT = performance.now(); raf = requestAnimationFrame(tick); };
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches, coarse = matchMedia('(pointer: coarse)').matches, frameMs = coarse && +CONFIG.fpsCoarse > 0 ? 1000 / +CONFIG.fpsCoarse : 0; let lastRender = 0;
@@ -776,7 +778,9 @@
         if (CONFIG.propSeconds > 0 && (!stepped || liveApproach)) { idle += dt * Math.PI * 2 / CONFIG.propSeconds; if (droneOn) dirty = true; }   // stepped, the idle turn stops with the approach, so the docked canvas rests   // the propellers go with the rest of the drone: once it has gone there is nothing turning to draw
         if (Math.abs(spinTarget - spin) > 1e-4) { spin += (spinTarget - spin) * Math.min(1, dt * 6); if (Math.abs(spinTarget - spin) < 1e-4) spin = spinTarget; dirty = true; }
         for (const p of props) p.mesh.rotation.y = p.dir * (spin + idle) + p.phase;
-        if (flag && flag.shown) { flagT += dt; flag.update(flagT); dirty = true; }
+        // the flag's wave is rebuilt on the CPU, so on touch devices it moves at flagFpsCoarse (its time still runs at full rate);
+        // a scroll or a turning prop still draws every frame, the flag simply keeps its last pose between its own steps
+        if (flag && flag.shown) { flagT += dt; const fs = coarse && +CONFIG.flagFpsCoarse > 0 ? 1000 / +CONFIG.flagFpsCoarse : 0; if (now - flagLast >= fs - 2) { flagLast = now; flag.update(flagT); dirty = true; } }
       }
       if (dirty && visible && now - lastRender >= frameMs - 2) { dirty = false; lastRender = now; render(); }
       inTick = false;
@@ -791,7 +795,7 @@
       host.style.background = CONFIG.background; faceMat.color.set(CONFIG.face); if (hot) for (const it of hot.items) { it.dot.setAttribute('fill', CONFIG.primary); it.path.setAttribute('stroke', CONFIG.primary); it.label.style.color = CONFIG.primary; } gridMat.uniforms.uColor.value.set(CONFIG.gridColor); for (const m of lineMats) { m.uniforms.uBg.value.set(CONFIG.face); if (!ribMats.has(m) && m !== gridMat) m.uniforms.uColor.value.set(CONFIG.secondary); } edgeMat.uniforms.uC2.value.set(CONFIG.secondary); motorColor(ease(progress)); if (!grid) buildGrid(); dirty = true; wake();
     }
     buildHotspots(); applyColors();
-    const themeWatch = setInterval(() => { if (!alive) return; applyColors(); if (inspect) { const b = readDockBg(); if (b !== dockBg) { dockBg = b; if (docked) host.style.background = b || CONFIG.background; } } }, 400);
+    const themeWatch = setInterval(() => { if (!alive || !visible) return; applyColors(); if (inspect) { const b = readDockBg(); if (b !== dockBg) { dockBg = b; if (docked) host.style.background = b || CONFIG.background; } } }, 400);
     dockBg = readDockBg();
     const ro = global.ResizeObserver ? new ResizeObserver(frame) : null; if (ro) ro.observe(host); else addEventListener('resize', frame);
     frame();
@@ -828,5 +832,5 @@
       .then(([, buf]) => new Promise((res, rej) => new global.THREE.GLTFLoader().parse(buf, url.replace(/[^/]*$/, ''), res, rej)))
       .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.20.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.21.0' };
 })(typeof window !== 'undefined' ? window : this);
