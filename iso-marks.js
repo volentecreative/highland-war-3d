@@ -29,7 +29,8 @@
     faceColor: 'var(--iso-face, var(--topo-block, #3a3a3a))',
     lineColor: 'var(--iso-line, var(--topo-label, #f2f2f0))',
     background: 'var(--iso-bg, transparent)',
-    pixelRatioCap: 2
+    pixelRatioCap: 2,
+    lazy: 1                // set up once the mark is within this many viewports of the screen; null = at once
   };
   const COLOR_KEYS = ['faceColor', 'lineColor', 'background'];
 
@@ -74,9 +75,9 @@
       const g = new THREE.Group(); g.add(new THREE.Mesh(geometry, mat)); const ls = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 1), lm); ls.renderOrder = 1; g.add(ls);   // lines after faces, so a box's back edges stay behind its front
       g.userData.mats = [fm, cm, lm]; return g; };
     const dispose = g => { scene.remove(g); g.children.forEach(c => c.geometry.dispose()); };
-    let dirty = true;
+    let dirty = true, alive = true, lastT = performance.now(), raf = 0, visible = true, moving = true;   // the loop's state (see wake / frame)
     const lineMaterial = () => { const m = lineMat.clone(); mats.push({ m, kind: 'line' }); return m; };
-    const S = makeScene({ THREE, scene, solid, dispose, lineMaterial, CONFIG, redraw: () => { dirty = true; }, worldPerPx: () => (camera.right - camera.left) / Math.max(1, host.clientWidth) });
+    const S = makeScene({ THREE, scene, solid, dispose, lineMaterial, CONFIG, redraw: () => { dirty = true; wake(); }, worldPerPx: () => (camera.right - camera.left) / Math.max(1, host.clientWidth) });
 
     function placeCam() {
       const c = S.center(); const el = CONFIG.elevation, az = CONFIG.azimuth;
@@ -88,40 +89,45 @@
       const inv = camera.matrixWorldInverse; let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
       for (const p of S.bounds()) { const q = p.clone().applyMatrix4(inv); x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y); }
       const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, a = w / h, ext = Math.max((x1 - x0) / a, y1 - y0) / 2 * CONFIG.margin;
-      camera.left = cx - ext * a; camera.right = cx + ext * a; camera.top = cy + ext; camera.bottom = cy - ext; camera.updateProjectionMatrix(); dirty = true;
+      camera.left = cx - ext * a; camera.right = cx + ext * a; camera.top = cy + ext; camera.bottom = cy - ext; camera.updateProjectionMatrix(); dirty = true; wake();
     }
-    let alive = true, lastT = performance.now();
+    // the loop runs only while something moves and the mark is on screen (and the tab is showing); at rest, nothing
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function wake() { if (!raf && alive && visible && !document.hidden) { lastT = performance.now(); raf = requestAnimationFrame(frame); } }
     function frame(now) {
-      if (!alive) return; requestAnimationFrame(frame);
+      raf = 0; if (!alive) return;
       const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
-      if (S.update(dt, reduced)) dirty = true;
-      if (!dirty) return; dirty = false; renderer.render(scene, camera);
+      moving = !!S.update(dt, reduced); if (moving) dirty = true;
+      if (dirty) { dirty = false; renderer.render(scene, camera); }
+      if (moving) wake();
     }
-    requestAnimationFrame(frame);
+    wake();
+    const vio = global.IntersectionObserver ? new IntersectionObserver(en => { visible = en[en.length - 1].isIntersecting; if (visible) { dirty = true; wake(); } }) : null;
+    if (vio) vio.observe(host);
+    const onVis = () => { if (!document.hidden) { dirty = true; wake(); } }; document.addEventListener('visibilitychange', onVis);
     // hover on the target (or the host), keyboard focus too; on touch a tap stands in for a hover
     // 'closest:.card' walks up from the host; any other string is a selector; an element is taken as is
     const hs = CONFIG.hover, hov = (hs && hs.nodeType ? hs : typeof hs === 'string' && hs.startsWith('closest:') ? host.closest(hs.slice(8)) : hs ? document.querySelector(hs) : null) || host;
-    hov.addEventListener('pointerenter', ev => { if (ev.pointerType !== 'touch') S.enter(); });
-    hov.addEventListener('pointerleave', ev => { if (ev.pointerType !== 'touch') S.leave(); });
-    hov.addEventListener('pointerdown', ev => { if (ev.pointerType === 'touch') S.tap(); });
-    hov.addEventListener('focusin', () => S.enter()); hov.addEventListener('focusout', () => S.leave());
+    hov.addEventListener('pointerenter', ev => { if (ev.pointerType !== 'touch') { S.enter(); wake(); } });
+    hov.addEventListener('pointerleave', ev => { if (ev.pointerType !== 'touch') { S.leave(); wake(); } });
+    hov.addEventListener('pointerdown', ev => { if (ev.pointerType === 'touch') { S.tap(); wake(); } });
+    hov.addEventListener('focusin', () => { S.enter(); wake(); }); hov.addEventListener('focusout', () => { S.leave(); wake(); });
     let lastColors = '';
     function applyColors() {
       const next = {}; for (const k of COLOR_KEYS) next[k] = resolveColor(host, RAW[k]);
       const sig = JSON.stringify(next) + CONFIG.shade; if (sig === lastColors) return; lastColors = sig; Object.assign(CONFIG, next);
       host.style.background = CONFIG.background; const cap = new THREE.Color(CONFIG.faceColor); if (CONFIG.shade) cap.lerp(new THREE.Color('#ffffff'), CONFIG.shade);
-      for (const { m, kind } of mats) m.color.set(kind === 'line' ? CONFIG.lineColor : kind === 'cap' ? cap : CONFIG.faceColor); dirty = true;
+      for (const { m, kind } of mats) m.color.set(kind === 'line' ? CONFIG.lineColor : kind === 'cap' ? cap : CONFIG.faceColor); dirty = true; wake();
     }
     applyColors();
-    const themeWatch = setInterval(() => { if (alive) applyColors(); }, 400);
+    const themeWatch = setInterval(() => { if (alive && visible && !document.hidden) applyColors(); }, 400);   // only while it can be seen
     const ro = global.ResizeObserver ? new ResizeObserver(fit) : null; if (ro) ro.observe(host); else addEventListener('resize', fit);
     fit();
     return {
       set(patch) { Object.assign(CONFIG, patch || {}); for (const k of COLOR_KEYS) if (patch && k in patch) { RAW[k] = patch[k]; lastColors = ''; } if (S.set) S.set(patch || {}); applyColors(); fit(); },
       get state() { return S.state(); },
-      trigger() { S.enter(); }, release() { S.leave(); },
-      destroy() { alive = false; clearInterval(themeWatch); if (ro) ro.disconnect(); else removeEventListener('resize', fit); renderer.dispose(); renderer.domElement.remove(); }
+      trigger() { S.enter(); wake(); }, release() { S.leave(); wake(); },
+      destroy() { alive = false; clearInterval(themeWatch); if (vio) vio.disconnect(); document.removeEventListener('visibilitychange', onVis); if (ro) ro.disconnect(); else removeEventListener('resize', fit); renderer.dispose(); renderer.domElement.remove(); }
     };
   }
 
@@ -297,12 +303,16 @@
     const host = typeof target === 'string' ? document.querySelector(target) : target;
     if (!host) return Promise.reject(new Error('IsoMarks: target not found'));
     const CONFIG = Object.assign({}, DEF, config || {});
-    return loadThree().then(() => stage(host, CONFIG, sceneFn));
+    // lazy: nothing (three.js, the WebGL context) is set up until the mark is within `lazy` viewports of the screen, so marks far down a
+    // page cost its load nothing and hold no WebGL context until they are needed; null / -1 = at once
+    const L = CONFIG.lazy == null ? -1 : +CONFIG.lazy;
+    const near = !(L >= 0) || !global.IntersectionObserver ? Promise.resolve() : new Promise(res => { const io = new IntersectionObserver(en => { if (en[0].isIntersecting) { io.disconnect(); res(); } }, { rootMargin: Math.round(L * 100) + '% 0px' }); io.observe(host); });
+    return near.then(loadThree).then(() => stage(host, CONFIG, sceneFn));
   }
   global.IsoMarks = {
     flag: (t, c) => mount(t, c, FLAG, flagScene),
     conveyor: (t, c) => mount(t, c, CONVEYOR, conveyorScene),
     shield: (t, c) => mount(t, c, SHIELD, shieldScene),
-    defaults: { flag: FLAG, conveyor: CONVEYOR, shield: SHIELD }, defaultMark, shieldMark: SHIELD_MARK, version: '1.1.0'
+    defaults: { flag: FLAG, conveyor: CONVEYOR, shield: SHIELD }, defaultMark, shieldMark: SHIELD_MARK, version: '1.2.0'
   };
 })(typeof window !== 'undefined' ? window : this);

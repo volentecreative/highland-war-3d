@@ -28,7 +28,8 @@
      fades into the live canvas and the hero copy fades in and deciphers (window.hwPreloader.done, which the scramble
      embed waits on); a link to an #anchor on this page is followed then.
      First visit in a session: the full preloader below (the Highland mark spinning, a real progress bar), shown for
-     at least 500ms. Every other load: nothing is shown at all unless the drone takes more than 300ms, and then only a
+     at least 2s so it reads as intended rather than as a flicker: the bar fills steadily over those 2s (or follows the
+     real load, if that is slower), holds at 100% for a beat, then the overlay lifts. Every other load: nothing is shown at all unless the drone takes more than 300ms, and then only a
      small spinning mark and bar at the foot of the screen; from the cache the gate lifts before it can be noticed.
      Either way the gate gives up after 8s (the poster then stays as the drone's stand-in if it failed).
      Progress is real: the drone embed reports its model bytes, three.js, the loader and the build (drone-hero.js
@@ -71,7 +72,7 @@
 <script>
 (function () {
   'use strict';
-  var KEY = 'hw-preloader-seen', MIN = 500, MAX = 8000, QUIET = 300;
+  var KEY = 'hw-preloader-seen', MIN = 2000, MAX = 8000, QUIET = 300;
   var root = document.documentElement, t0 = Date.now();
   var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var resolveDone, done = new Promise(function (r) { resolveDone = r; });
@@ -152,7 +153,7 @@
   var shown = 0;
   function paint() {
     if (!el) return;
-    var target = finished ? 1 : Math.min(0.99, real());
+    var target = finished ? 1 : Math.min(0.99, real(), seen ? 1 : (Date.now() - t0) / MIN);   // first visit: the bar is paced to fill over MIN, so it never races to 100% and waits
     shown += (target - shown) * (reduced ? 1 : 0.18);
     if (target - shown < 0.002) shown = target;
     fill.style.transform = 'scaleX(' + shown.toFixed(3) + ')';
@@ -166,7 +167,7 @@
   function check() { if (!finished && closed && !Object.keys(pending).length) finish(); }
   function finish() {
     if (finished) return; finished = true;
-    var wait = seen ? 0 : Math.max(0, MIN - (Date.now() - t0)) + (reduced ? 0 : 200);   // first visit: at least 500ms, and 200ms for the bar to reach 100%
+    var wait = seen ? 0 : Math.max(0, MIN - (Date.now() - t0)) + (reduced ? 0 : 250);   // first visit: at least 2s, then 250ms held at 100% before it lifts
     setTimeout(lift, wait);
   }
   var failsafe = setTimeout(function () { finished = true; lift(); }, MAX);
