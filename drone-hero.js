@@ -273,7 +273,7 @@
   // which GL lines are not. A segment crossing the near plane is clipped to it first. The grid fades by each end's
   // distance from the focus on screen.
   const LINE_VERT = `
-    uniform vec2 uRes, uFocus, uCentre; uniform float uHalf, uNear, uFade0, uFadeOn, uExtent;
+    uniform vec2 uRes, uFocus, uCentre; uniform float uHalf, uNear, uFade0, uFadeOn, uExtent, uFy;
     attribute vec3 pointA, pointB; attribute vec2 corner; varying vec2 vD; varying float vLen, vF;
     void main(){
       vec4 va = modelViewMatrix * vec4(pointA, 1.0), vb = modelViewMatrix * vec4(pointB, 1.0); float nz = -uNear * 1.001;
@@ -284,7 +284,7 @@
       vec2 d = sb - sa; float len = max(length(d), 1e-4); d /= len; vec2 n = vec2(-d.y, d.x);
       bool B = corner.x > 0.5; vec4 c = B ? cb : ca; vec2 s = (B ? sb : sa) + (B ? d : -d) * uHalf + n * corner.y * uHalf;
       vD = vec2(corner.y * uHalf, B ? len + uHalf : -uHalf); vLen = len;
-      float r = distance(c.xy / c.w, uFocus), rw = distance((B ? pointB : pointA).xz, uCentre) / uExtent;   // on screen, and on the ground
+      float r = length((c.xy / c.w - uFocus) * vec2(1.0, uFy)), rw = distance((B ? pointB : pointA).xz, uCentre) / uExtent;   // on screen, and on the ground
       vF = uFadeOn * max(clamp((r - uFade0) / (1.0 - uFade0), 0.0, 1.0), smoothstep(0.4, 0.95, rw));
       gl_Position = vec4(s / (uRes * 0.5) * c.w, c.z, c.w);
     }`;
@@ -311,7 +311,7 @@
     const pivot = new THREE.Group(), rig = new THREE.Group(); pivot.add(rig); scene.add(pivot);   // the drone rides in the rig, pivoted on its centre: the tilt turns the pivot, and eases away over the approach
     const faceMat = new THREE.MeshBasicMaterial({ color: CONFIG.face, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
     const lineMaterial = (color, fade, opacity) => new THREE.ShaderMaterial({ vertexShader: LINE_VERT, fragmentShader: LINE_FRAG, transparent: true, depthWrite: false, side: THREE.DoubleSide,
-      uniforms: { uRes: { value: new THREE.Vector2(1, 1) }, uFocus: { value: new THREE.Vector2() }, uHalf: { value: 1 }, uWidth: { value: 1 }, uNear: { value: 0.05 }, uFade0: { value: 0.3 }, uFadeOn: { value: fade ? 1 : 0 }, uCentre: { value: new THREE.Vector2() }, uExtent: { value: 1 }, uColor: { value: new THREE.Color(color) }, uBg: { value: new THREE.Color(CONFIG.face) }, uOpacity: { value: opacity } } });
+      uniforms: { uRes: { value: new THREE.Vector2(1, 1) }, uFocus: { value: new THREE.Vector2() }, uHalf: { value: 1 }, uWidth: { value: 1 }, uNear: { value: 0.05 }, uFade0: { value: 0.3 }, uFadeOn: { value: fade ? 1 : 0 }, uCentre: { value: new THREE.Vector2() }, uExtent: { value: 1 }, uFy: { value: 1 }, uColor: { value: new THREE.Color(color) }, uBg: { value: new THREE.Color(CONFIG.face) }, uOpacity: { value: opacity } } });
     const ribMat = lineMaterial(CONFIG.primary, false, +CONFIG.ribOpacity), gridMat = lineMaterial(CONFIG.gridColor, true, 1), lineMats = [ribMat, gridMat];
     const lineMesh = (segs, mat) => {   // segs: ax ay az bx by bz per segment; four corners each (A-, A+, B-, B+)
       const n = segs.length / 6, A = new Float32Array(n * 12), B = new Float32Array(n * 12), C = new Float32Array(n * 8), idx = [];
@@ -789,6 +789,7 @@
       fragmentShader: 'uniform sampler2D tA, tB; uniform float uMix; varying vec2 vUv; void main(){ gl_FragColor = mix(texture2D(tB, vUv), texture2D(tA, vUv), uMix); }',
       uniforms: { tA: { value: null }, tB: { value: null }, uMix: { value: 1 } } });
     function render() {
+      gridMat.uniforms.uFy.value = h / Math.max(1, fullH());   // the fade's distance in the full frame's terms: docking crops the view to the band (its clip space spans the band, not the frame), so the fade stays where it was
       const a = shownDroneA, fading = inspect && inspect.crossfade !== false && droneOn && a < 0.999;
       if (!fading) { if (xf.a) { xf.a.dispose(); xf.b.dispose(); xf.a = xf.b = null; xf.w = xf.h = 0; } drawFrame(null); return; }
       const { W, H } = T; if (!xf.a) { const o = { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: true, stencilBuffer: false }; xf.a = new THREE.WebGLRenderTarget(W, H, o); xf.b = new THREE.WebGLRenderTarget(W, H, o); }
@@ -944,5 +945,5 @@
       .then(([, buf]) => new Promise((res, rej) => { const ld = new global.THREE.GLTFLoader(); if (global.MeshoptDecoder) ld.setMeshoptDecoder(global.MeshoptDecoder); ld.parse(buf, url.replace(/[^/]*$/, ''), res, rej); }))
       .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.28.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.28.1' };
 })(typeof window !== 'undefined' ? window : this);
