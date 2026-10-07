@@ -93,12 +93,18 @@
      The load feeds the page's load gate (head code): onProgress reports the model's bytes, three.js, the
      loader and the build, and the mount's promise is tracked, so the gate lifts once the drone is drawn; until then
      the poster frame below stands in for it.
-     UP TO 991px ALL OF THE ABOVE AFTER THE HERO IS SWITCHED OFF: the product section's sticky sequence is hidden there
-     (.product_panel display none, no padding; .section_product is left as an empty marker so #product links still land
-     above the orbit section), the sticky holder is full height again and the hero pulls up over it as on desktop, so
-     the drone is simply the hero's background, holding its opening view (the flag behind it) and scrolling away with
-     the hero; no inspection is set up (inspect null). The product itself is .section_product-alt, right after this
-     track, with its own drone (embed-product-alt.html): it lands on the motor and orbits it. -->
+     UP TO 991px, IN PLACE OF ALL OF THE ABOVE AFTER THE ARRIVAL: the product section's sticky panel is hidden there
+     (.product_panel display none) and .product_track (data-drone-end) is a marker one band tall (42% of the viewport under
+     the navbar) at the hero's end, the last of the track. The sticky holder is that band's height (the canvas in it is still
+     full height, and the hero pulls up by the band's height), so the drone stays pinned behind the hero as it scrolls and
+     the camera makes the same approach as on desktop, round and down to beneath the motor. The path arrives as the marker
+     reaches the top, which is also where the band lets go: the canvas docks to its top 42% (inspect.dock; only cropped,
+     never reframed) and leaves with the track, and .section_product-alt, the Ridge copy that has ridden up over the lower
+     part of the drone (it has the page background and a 1px border-01 line along its top), follows right under the band.
+     There, with no rows (inspect.auto, drone-hero.js 3.26), the camera moves on by itself over 2.4s: the rest of the drone
+     dissolves behind the motor (isolate) as it rises to an isometric view, then it turns slowly round the motor (a turn
+     every 40s) while the band is on screen. Scrolled back up past the arrival, it eases back to the arrival view (the orbit
+     unwinding with it) and the approach plays in reverse. The band draws at a pixel ratio of up to 2. -->
 <div id="hero-drone" style="width:100%;height:100%;--topo-block:var(--_theme---background-01);--topo-label:var(--_theme---text-01);--topo-label-secondary:var(--_theme---map-boundary);--drone-grid:var(--_theme---text-03)"></div>
 <!-- The poster frame: a still of the drone's first frame, the drone alone (posters/ in the repo, one per layout and theme, chosen here
      before it paints), over the canvas while the page's load gate is up; it fades into the live canvas (the flag fades in with it) when the gate
@@ -112,7 +118,7 @@
     img.src = 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@f269731/posters/drone-start-' + (n ? 'narrow' : 'wide') + '-' + t + '.webp';
   })();
 </script>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@5b5e59e/drone-hero.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@f28d6db/drone-hero.js"></script>
 <script>
   var hwPre = window.hwPreloader;
   // up to 991px (the narrow layout) the drone is set up once, at load: no idle propeller turn (the props only
@@ -141,7 +147,7 @@
     azimuth: -28, elevation: -14,         // the arrival: round to the camera's left and below the motor, looking up (the inspection drifts on from here)
     zoom: 0.33,                           // the motor's height as a share of the frame at the arrival (the inspection closes in from here: 0.55 at 01, 0.5 at 02, 0.32 for the row at 03)
     point:       { x: 0.25, y: 0.46 },    // where the motor shell lands: the centre of the left half, a touch high so the base under it sits centred too
-    pointNarrow: { x: 0.5, y: 0.2 },      // … on screens up to 991px wide: the middle of the docked band (about half of inspect.dock), so the crop keeps it centred (every pose keeps this point there)
+    pointNarrow: { x: 0.5, y: 0.23 },     // … on screens up to 991px wide: a touch below the middle of the docked band (about half of inspect.dock), so the crop keeps it centred (the pose keeps this point there)
     fovNarrow: 38,                        // … and there the lens widens from 30 degrees at the top of the page to this at the arrival, and holds: the camera keeps its distance, so a little more of the scene shows by the split view (higher = wider)
     primaryIn: [0.6, 1],                  // the motors go from the secondary colour to white over the last 40% of the approach (the panel resolves in over the same window)
     propSeconds: hwNarrow ? 0 : 40,       // the propellers idle at one turn every 40 seconds on desktop; in the narrow layout they hold still and only turn with the scroll (0 = still)
@@ -149,11 +155,19 @@
     grid: 1, gridExtent: 24,              // the floor grid's cell (motor heights) and how far it reaches from the drone's centre
     pixelRatioCapCoarse: 2, fpsCoarse: 0,   // touch devices: the canvas's pixel ratio (the docked band goes up to the device's own) and no frame cap (it only draws while something moves); lower either if a phone stutters
     flagFpsCoarse: 0,                     // touch devices: the flag waves every frame, as on desktop (drone-hero.js 3.21+; 30 would step it at 30 a second)
-    inspect: hwNarrow ? null : {          // desktop only: the inspection over the product track's scroll (the poses, isolate, crossfade, copies and easeOut are the library's defaults; see the README to change them). Up to 991px there is none: the product is the orbit section below (embed-product-alt)
-      windows: [[0.25, 0.5], [0.5, 0.75], [0.75, 1]],   // of that scroll (500svh): the first quarter the intro, then a quarter each for 01, 02 and 03 — each stage's move fills its quarter, and each row gets drone:reach as its window begins. Up to 991px each row plays its own window while it is the active one
-      follow: 'scroll',                   // up to 991px: the camera scrubs with the scroll, each stage playing while its row is the active one. To go back to the stepped version (a one-second move per row, still between), delete this line (or set 'tween')
-      dock: 0.42,                         // up to 991px: the band the canvas docks to at the arrival, as a share of its height (keep in step with .hero-drone_sticky's height, .section_hero's top margin and .product_panel's top margin there)
-      click: true                         // a click on a row scrolls the page to its window (up to 991px: brings the row to the trigger line)
+    zoomNarrow: 0.27,                     // up to 991px: the motor's height at the arrival as a share of the full canvas (about half the band's height on screen, with the wider lens)
+    inspect: hwNarrow ? {                 // up to 991px: no rows; at the arrival the camera moves on by itself to one pose, then orbits (see above)
+      poses: [{ azimuth: -45, elevation: 32, zoomNarrow: 0.25 }],   // the isometric view it rises to (zoomNarrow: the motor's height, a share of the full canvas)
+      windows: [[0, 1]], isolate: [0, 0.6],   // the rest of the drone is gone by 60% of the move
+      rows: '', copies: null, callouts: false, click: false, fillVar: '', activeVar: '', reachEvent: '', unreachEvent: '', easeOut: 0,
+      steps: true, auto: true,            // stepped, and the move plays by itself once the drone has arrived…
+      tween: 2400,                        // … over this many ms…
+      orbitSeconds: 40,                   // … then one slow turn round the motor every 40s
+      dock: 0.42,                         // the band the canvas docks to at the arrival, as a share of its height (keep in step with .hero-drone_sticky's height, .section_hero's top margin and .product_track's height there)
+      dockPixelRatio: 2                   // the band orbits continuously, so it draws at a pixel ratio of up to 2
+    } : {                                 // desktop: the inspection over the product track's scroll (the poses, isolate, crossfade, copies and easeOut are the library's defaults; see the README to change them)
+      windows: [[0.25, 0.5], [0.5, 0.75], [0.75, 1]],   // of that scroll (500svh): the first quarter the intro, then a quarter each for 01, 02 and 03 — each stage's move fills its quarter, and each row gets drone:reach as its window begins
+      click: true                         // a click on a row scrolls the page to its window
     }
   }) : Promise.reject(new Error('drone-hero.js did not load'));
   if (hwPre) hwPre.track('drone', hwDrone);   // the preloader lifts once the drone is drawn (or has failed)
