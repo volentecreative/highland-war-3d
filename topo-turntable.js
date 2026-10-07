@@ -456,7 +456,8 @@
       if(!w||!h){ pendingFit=true; return; }
       pendingFit=false;
       const pr=Math.min(devicePixelRatio||1,PR_CAP); if(pr!==renderer.getPixelRatio()) renderer.setPixelRatio(pr);
-      if(w!==sizedW||h!==sizedH){ sizedW=w; sizedH=h; renderer.setSize(w,h,false); }   // only on a real change: setSize clears the canvas, and a phone's toolbar fires resize on every scroll
+      const resized=(w!==sizedW||h!==sizedH), first=!sizedW;
+      if(resized){ sizedW=w; sizedH=h; renderer.setSize(w,h,false); }   // only on a real change: setSize clears the canvas, and a phone's toolbar fires resize on every scroll
       for(const l of labels) l.em=l.el.offsetHeight||14;   // measured here, not every frame
       camera.aspect=w/h;
       dist=R*3; pol=polFinal(); pivot.copy(pivotHome); camera.fov=CONFIG.lens; camera.updateProjectionMatrix();
@@ -468,7 +469,10 @@
       const b=measure(); const cy=(b.minY+b.maxY)/2; pivot.y += cy*dist*Math.tan(camera.fov*Math.PI/360)*0.9; pivotHome.copy(pivot);
       fitDist=dist; setFrustum(); renderBump++;
       if(AP) applyApproach(); else placeCam(az);
+      if(resized && !first) redraw();   // setSize has just cleared the canvas: draw it again now, not on the next frame, so a resize never shows a blank frame
     }
+    // draw the current view at once (after a resize), with the focus and the stage as the frame loop has them
+    function redraw(){ const t=AP?AP.t:1; if(AP) applyStage(t); applyFocus(t); lastVw=layerFade(); renderer.render(scene,camera); renderKey=''; }
     function setFrustum(){ camera.near=Math.max(1,dist*0.02); camera.far=dist*6+RE*3; camera.updateProjectionMatrix(); }
     // layer visibility by how much ground the frame spans: the country from orbit, relief on the way in, the county last
     const smooth=(a,b,t)=>{ const x=Math.min(1,Math.max(0,(t-a)/(b-a))); return x*x*(3-2*x); };
@@ -643,5 +647,5 @@
   }
   function autoMount(){ document.querySelectorAll('[data-topo]').forEach(el=>{ if(el.dataset.topoMounted) return; el.dataset.topoMounted='1'; let cfg={}; try{ cfg=JSON.parse(el.dataset.config||'{}'); }catch(e){} mount(el,cfg); }); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', autoMount); else autoMount();
-  global.TopoTurntable = { mount, defaults: DEFAULTS, version: '2.4.0' };
+  global.TopoTurntable = { mount, defaults: DEFAULTS, version: '2.4.1' };
 })(window);
