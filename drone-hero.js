@@ -36,6 +36,7 @@
   const DEFAULTS = {
     model: '',                 // URL of the GLB; '' = heavy_lift_drone_model.glb beside this script
     loader: 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js',
+    meshopt: 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/meshopt_decoder.js',   // the decoder for a meshopt-compressed model (EXT_meshopt_compression, as heavy_lift_drone_model.glb is); fetched alongside three.js. '' = none (an uncompressed model)
     onProgress: null,          // function({ loaded, total, scripts, built }): called as the model's bytes, three.js and the loader come in and once the drone is built (total 0 = the size is not known), for a page's preloader
     focus: 'FL',               // which motor the path ends on: FR, FL, BR, BL, or with ' 2' for the lower ring of the coaxial pairs
     track: '',                 // the tall section the canvas is pinned inside ('closest:.section_hero', a selector, or an element); the camera's path runs over its scroll. '' = hold the end view
@@ -100,7 +101,10 @@
     msaa: false,               // multisampling on the canvas itself; the lines have their own antialiasing (the edge pass's supersampling, the quads' coverage) so it changes nothing visible and costs fill on every frame
     // on touch devices (a coarse pointer) the work per frame is cut: the canvas at a lower pixel ratio, and at most this many frames a second
     pixelRatioCapCoarse: 1.5,
-    fpsCoarse: 30
+    fpsCoarse: 30,
+    themeFade: 200,            // ms over which the colours follow a light/dark switch (the site's own html/body transition is .2s); 0 = snap
+    sampleCapCoarse: 4,        // on touch devices the edge pass's resolution is at most this many times the canvas's CSS pixels (pixel ratio x supersample): at a pixel ratio of 3 (the docked band on a phone) it supersamples 1.33x rather than 2x — the same sharpness on screen at under half the fill, so the scroll keeps its frame rate; 0 = no cap
+    flagFpsCoarse: 30          // on touch devices the flag's wave (rebuilt on the CPU) steps at most this many times a second; 0 = every frame
   };
   const COLOR_KEYS = ['primary', 'secondary', 'gridColor', 'face', 'background'];
   const INSPECT = {
@@ -167,6 +171,8 @@
   }
   const loadScript = (src, ready) => { if (ready()) return Promise.resolve(); const key = '__loading_' + src; if (!global[key]) global[key] = new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('failed to load ' + src)); document.head.appendChild(s); }); return global[key]; };
   const loadThree = () => loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js', () => !!global.THREE);
+  // a colour part way between two CSS colours, for the theme fade; anything three.js would not parse cleanly snaps to the end
+  const mixColor = (a, b, u) => { if (u >= 1 || a === b || !global.THREE) return b; const ok = v => typeof v === 'string' && /^(#|rgb|hsl)/i.test(v.trim()); if (!ok(a) || !ok(b)) return b; const c = new global.THREE.Color(a); return '#' + c.lerp(new global.THREE.Color(b), u).getHexString(); };
   const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
   // a propeller: `n` blades about the y axis, radius R, hub radius r0. Each blade is a lofted solid: a thin lens
@@ -488,7 +494,8 @@
     // styles, and on phones a style change round a sticky element can make it re-sync mid-scroll — so not up to `breakpoint`
     // (a caller can pass narrowToo to write one anyway, in steps of 0.02)
     const varLast = {}; const setVar = (name, v, dp, narrowToo) => { if (!name) return; const narrow = isNarrow(); if (narrow && !narrowToo) return; const s = narrow ? (Math.round(v * 50) / 50).toFixed(2) : v.toFixed(dp || 2); if (varLast[name] === s) return; varLast[name] = s; host.style.setProperty(name, s); if (trackEl) trackEl.style.setProperty(name, s); };
-    const isNarrow = () => !!(global.matchMedia && global.matchMedia('(max-width: ' + (+CONFIG.breakpoint || 991) + 'px)').matches);
+    let narrowMQ = null, narrowBp = 0;   // one MediaQueryList, kept (it is read on every scroll), remade only if `breakpoint` changes
+    const isNarrow = () => { const bp = +CONFIG.breakpoint || 991; if (!global.matchMedia) return false; if (bp !== narrowBp) { narrowBp = bp; narrowMQ = global.matchMedia('(max-width: ' + bp + 'px)'); } return narrowMQ.matches; };
     const endPoint = () => (isNarrow() && CONFIG.pointNarrow) || CONFIG.point || { x: 0.5, y: 0.5 };
     const zoomDist = z => motorH / (2 * Math.tan((+CONFIG.fov || 30) * D2R / 2) * Math.max(0.05, z || 0.36));   // a share of the full canvas's height, docked or not
     // the camera at a heading (radians) and distance from camTarget, with the target at (px, py) of the frame
@@ -551,24 +558,33 @@
       const dg = progressTarget >= 0.999 ? true : progressTarget < 0.995 ? false : dk === 1;   // its own, narrow hysteresis: a resize each way, so not on every pixel
       const d = dg && dockF() < 1 ? 1 : 0; if (d !== dk) setDock(d);
     }
-    // follow: 'scroll' — how far past the line each row's top is (the arrival counts as row 0, past when the end element is above the
-    // canvas's top), and so where on the path the camera should be: at pose k exactly as row k's top meets the line, in between pro rata.
-    // The active row is the last one past the line, and its bar fills on the way to the next (the last one's by the time the band leaves)
+    // follow: 'scroll' — the rows play the same windows as the wide layout: how far past the line each row's top is (the arrival
+    // counts as row 0, past when the end element is above the canvas's top). Before row 1 reaches the line the camera runs the intro
+    // (0 to the first window's start); while row k is the last one past the line it runs row k's window, from its start to its end,
+    // arriving at pose k as row k+1 meets the line — so each stage plays while its own row is the active one, as above the
+    // breakpoint. The last row's stage (and its bar) ends by the time its top reaches the band's bottom, while it is still in full
+    // view, or as the band begins to leave if that comes sooner, so the last pose and a full bar are always seen
     function readFollow() {
-      if (!rows) rows = rowEls(); const P = inspect.poses, N = P.length, L = (+inspect.line || 0.68) * (global.innerHeight || 1);
+      if (!rows) rows = rowEls(); const P = inspect.poses, N = P.length, W = inspect.windows, vh = global.innerHeight || 1, L = (+inspect.line || 0.68) * vh;
       const a = [gate ? 1 : -1]; if (gate) { const er = endEl.getBoundingClientRect(), hr = host.getBoundingClientRect(); a[0] = hr.top - er.top; }
       for (let k = 1; k <= N; k++) { const r = rows.find(x => x.n === k); a.push(r ? L - r.el.getBoundingClientRect().top : -1e9); }
       let q = 0, st = 0; const fills = new Array(N).fill(0);
-      if (gate && a[0] >= 0) { let i = 0; while (i < N && a[i + 1] >= 0) i++; st = i;
-        q = i === N ? stateQ(N) : stateQ(i) + (stateQ(i + 1) - stateQ(i)) * Math.min(1, a[i] / Math.max(1, a[i] - a[i + 1]));
-        const rem = trackEl ? Math.max(0, trackEl.getBoundingClientRect().bottom - host.getBoundingClientRect().bottom) : 0;   // the scroll left before the band leaves, for the last bar
-        for (let k = 1; k <= N; k++) { const D = k < N ? a[k] - a[k + 1] : a[k] + rem; fills[k - 1] = a[k] < 0 ? 0 : Math.min(1, a[k] / Math.max(1, D)); } }
-      const moved = q !== fq || st !== step, filled = fills.some((f, i) => Math.abs(f - (fFills[i] || 0)) > 0.004);
+      if (gate && a[0] >= 0) {
+        const hb = host.getBoundingClientRect(), rem = trackEl ? Math.max(0, trackEl.getBoundingClientRect().bottom - hb.bottom) : 0;   // the scroll left before the band leaves
+        const lastD = Math.max(1, Math.min(L - hb.bottom, a[N] + rem));                     // the last row's stage: until its top meets the band's bottom
+        const D = k => k < N ? Math.max(1, a[k] - a[k + 1]) : lastD;                          // row k's stage, in px of scroll
+        let i = 0; while (i < N && a[i + 1] >= 0) i++; st = i;
+        const w0 = k => (W[k - 1] || [stateQ(k - 1), stateQ(k)])[0], w1 = k => stateQ(k);
+        if (i === 0) q = w0(1) * Math.min(1, a[0] / Math.max(1, a[0] - a[1]));            // the intro, from the arrival to row 1 at the line
+        else q = w0(i) + (w1(i) - w0(i)) * Math.min(1, a[i] / D(i));
+        for (let k = 1; k <= N; k++) fills[k - 1] = a[k] < 0 ? 0 : Math.min(1, a[k] / D(k)); }
+      const moved = q !== fq || st !== step, filled = fills.some((f, i) => Math.abs(f - (fFills[i] || 0)) > 0.002);
       fq = q; step = st; fFills = fills;
       if (moved) { shownPos = -1; wake(); }                     // the camera or the active row changed: a new frame
       else if (filled) writeFills();                            // only the bars: they are the page's CSS, so the canvas is not drawn again
     }
-    function writeFills() { if (!rows || !inspect.fillVar) return; const nr = isNarrow(); for (const r of rows) { const v = fFills[r.n - 1] || 0, f = (nr ? Math.round(v * 50) / 50 : v).toFixed(2); if (r.fill !== f) { r.fill = f; r.el.style.setProperty(inspect.fillVar, f); } } }
+    // the bars (narrow: in steps of 0.005, so a bar grows smoothly)
+    function writeFills() { if (!rows || !inspect.fillVar) return; const nr = isNarrow(); for (const r of rows) { const v = fFills[r.n - 1] || 0, f = (nr ? Math.round(v * 200) / 200 : v).toFixed(3); if (r.fill !== f) { r.fill = f; r.el.style.setProperty(inspect.fillVar, f); } } }
     function goStep(k) {
       const from = sq, to = stateQ(k), jump = Math.abs(k - step); step = k;
       if (reduced || !(+inspect.tween > 0)) { sq = to; tw = null; stepU = 1; } else { tw = { from, to, t0: performance.now(), dur: +inspect.tween * (1 + (Math.max(1, jump) - 1) / 3) }; stepU = 0; }
@@ -700,7 +716,7 @@
       // the pixel budget (and the largest texture) asks for, each with a guard band so the lines run across tile edges
       const PR = Math.min(devicePixelRatio || 1, docked && +inspect.dockPixelRatio > 0 ? +inspect.dockPixelRatio : coarse ? (+CONFIG.pixelRatioCapCoarse || 1.5) : (+CONFIG.pixelRatioCap || 2));   // docked: the band is half the pixels, so it can afford the device's own
       let resized = false; if (PR !== sized.PR || w !== sized.w || h !== sized.h) { sized.PR = PR; sized.w = w; sized.h = h; renderer.setPixelRatio(PR); renderer.setSize(w, h, false); resized = true; }   // only on a real change: setSize clears the canvas (a phone's toolbar fires resize on every scroll)
-      const S = Math.max(1, +CONFIG.supersample || 1), W = Math.round(w * PR), H = Math.round(h * PR), maxT = Math.min(8192, renderer.capabilities.maxTextureSize || 8192), budget = +CONFIG.pixelBudget || 8e6;
+      const S = Math.max(1, Math.min(+CONFIG.supersample || 1, coarse && +CONFIG.sampleCapCoarse > 0 ? +CONFIG.sampleCapCoarse / PR : Infinity)), W = Math.round(w * PR), H = Math.round(h * PR), maxT = Math.min(8192, renderer.capabilities.maxTextureSize || 8192), budget = +CONFIG.pixelBudget || 8e6;
       T.nx = Math.max(1, Math.ceil(W * S / maxT)); T.ny = Math.max(1, Math.ceil(H * S / maxT), Math.ceil(W * S * H * S / (budget * T.nx)));
       T.w = Math.ceil(W / T.nx); T.h = Math.ceil(H / T.ny); T.g = 3; T.PR = PR; T.S = S; T.W = W; T.H = H;
       const rw = Math.round((T.w + 2 * T.g) * S), rh = Math.round((T.h + 2 * T.g) * S); rt.setSize(rw, rh); edgeMat.uniforms.uRes.value.set(rw, rh);
@@ -751,7 +767,7 @@
       quad.material = mixMat; setQuad(-1, -1, 1, 1); renderer.setRenderTarget(null); renderer.clear(); renderer.render(quadScene, quadCam); quad.material = edgeMat;
     }
     // ---- the loop: the camera follows the scroll through the track, damped; the props turn with the scroll
-    let dirty = true, alive = true, visible = true, lastT = performance.now(), spin = 0, spinTarget = 0, idle = 0, flagT = 0, raf = 0, inTick = false;
+    let dirty = true, alive = true, visible = true, lastT = performance.now(), spin = 0, spinTarget = 0, idle = 0, flagT = 0, flagLast = 0, raf = 0, inTick = false;
     // frames are asked for only while something moves: a scroll to follow, a state's move, the dock, the props or the flag; at rest there is no loop at all
     const wake = () => { if (raf || !alive) return; if (!inTick) lastT = performance.now(); raf = requestAnimationFrame(tick); };
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches, coarse = matchMedia('(pointer: coarse)').matches, frameMs = coarse && +CONFIG.fpsCoarse > 0 ? 1000 / +CONFIG.fpsCoarse : 0; let lastRender = 0;
@@ -776,22 +792,40 @@
         if (CONFIG.propSeconds > 0 && (!stepped || liveApproach)) { idle += dt * Math.PI * 2 / CONFIG.propSeconds; if (droneOn) dirty = true; }   // stepped, the idle turn stops with the approach, so the docked canvas rests   // the propellers go with the rest of the drone: once it has gone there is nothing turning to draw
         if (Math.abs(spinTarget - spin) > 1e-4) { spin += (spinTarget - spin) * Math.min(1, dt * 6); if (Math.abs(spinTarget - spin) < 1e-4) spin = spinTarget; dirty = true; }
         for (const p of props) p.mesh.rotation.y = p.dir * (spin + idle) + p.phase;
-        if (flag && flag.shown) { flagT += dt; flag.update(flagT); dirty = true; }
+        // the flag's wave is rebuilt on the CPU, so on touch devices it moves at flagFpsCoarse (its time still runs at full rate);
+        // a scroll or a turning prop still draws every frame, the flag simply keeps its last pose between its own steps
+        if (flag && flag.shown) { flagT += dt; const fs = coarse && +CONFIG.flagFpsCoarse > 0 ? 1000 / +CONFIG.flagFpsCoarse : 0; if (now - flagLast >= fs - 2) { flagLast = now; flag.update(flagT); dirty = true; } }
       }
+      if (colorTw) stepColors(now);
       if (dirty && visible && now - lastRender >= frameMs - 2) { dirty = false; lastRender = now; render(); }
       inTick = false;
-      const more = tw || (stepped && follow() && sq !== fq) || (visible && (posTarget !== pos || dirty || (!reduced && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
+      const more = colorTw || tw || (stepped && follow() && sq !== fq) || (visible && (posTarget !== pos || dirty || (!reduced && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
       if (more) wake();
     }
     wake();
     let lastColors = '';
+    // a theme change fades the colours over themeFade ms (the page's own background and text transition with it),
+    // rather than snapping; the first paint, reduced motion and colours three.js cannot parse go straight there
+    let shownColors = null, colorTw = null;
     function applyColors() {
       const next = {}; for (const k of COLOR_KEYS) next[k] = resolveColor(host, RAW[k]);
-      const sig = JSON.stringify(next); if (sig === lastColors) return; lastColors = sig; Object.assign(CONFIG, next);
+      const sig = JSON.stringify(next); if (sig === lastColors) return; lastColors = sig;
+      if (!shownColors || reduced || !(+CONFIG.themeFade > 0)) { colorTw = null; paintColors(next); return; }
+      colorTw = { from: shownColors, to: next, t0: performance.now() }; wake();
+    }
+    function stepColors(now) {
+      const u = Math.min(1, (now - colorTw.t0) / +CONFIG.themeFade), e = u * u * (3 - 2 * u), mix = {};
+      for (const k of COLOR_KEYS) mix[k] = mixColor(colorTw.from[k], colorTw.to[k], e);
+      paintColors(mix); if (u >= 1) colorTw = null;
+    }
+    function paintColors(c) {
+      shownColors = c; Object.assign(CONFIG, c);
       host.style.background = CONFIG.background; faceMat.color.set(CONFIG.face); if (hot) for (const it of hot.items) { it.dot.setAttribute('fill', CONFIG.primary); it.path.setAttribute('stroke', CONFIG.primary); it.label.style.color = CONFIG.primary; } gridMat.uniforms.uColor.value.set(CONFIG.gridColor); for (const m of lineMats) { m.uniforms.uBg.value.set(CONFIG.face); if (!ribMats.has(m) && m !== gridMat) m.uniforms.uColor.value.set(CONFIG.secondary); } edgeMat.uniforms.uC2.value.set(CONFIG.secondary); motorColor(ease(progress)); if (!grid) buildGrid(); dirty = true; wake();
     }
     buildHotspots(); applyColors();
-    const themeWatch = setInterval(() => { if (!alive) return; applyColors(); if (inspect) { const b = readDockBg(); if (b !== dockBg) { dockBg = b; if (docked) host.style.background = b || CONFIG.background; } } }, 400);
+    const themeMO = global.MutationObserver ? new MutationObserver(() => applyColors()) : null;   // the theme toggle flips a class / data-theme on <html>: start the fade at once rather than on the next poll
+    if (themeMO) themeMO.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme', 'data-wf-theme'] });
+    const themeWatch = setInterval(() => { if (!alive || !visible) return; applyColors(); if (inspect) { const b = readDockBg(); if (b !== dockBg) { dockBg = b; if (docked) host.style.background = b || CONFIG.background; } } }, 400);
     dockBg = readDockBg();
     const ro = global.ResizeObserver ? new ResizeObserver(frame) : null; if (ro) ro.observe(host); else addEventListener('resize', frame);
     frame();
@@ -799,7 +833,7 @@
       set(patch) { Object.assign(CONFIG, patch || {}); for (const k of COLOR_KEYS) if (patch && k in patch) { RAW[k] = patch[k]; lastColors = ''; } edgeMat.uniforms.uDepthT.value = +CONFIG.depthEdge || 0.012; edgeMat.uniforms.uNormT.value = +CONFIG.normalEdge || 0.25; edgeMat.uniforms.uNormTM.value = CONFIG.normalEdgeMotor == null ? (+CONFIG.normalEdge || 0.25) : +CONFIG.normalEdgeMotor; if (patch && ('grid' in patch || 'gridExtent' in patch)) buildGrid(); applyColors(); onScroll(); frame(); },
       setProgress(p, q) { progressTarget = progress = Math.min(1, Math.max(0, +p || 0)); inspTarget = insp = Math.min(1, Math.max(0, +q || 0)); if (stepped) { tw = null; sq = insp; posTarget = pos = progress; } else posTarget = pos = progress + insp; place(); wake(); },
       get state() { const d = camera.position.clone().sub(camTarget); return { focus: key, azimuth: azimuth(), startAzimuth: azimuth0(), progress, inspect: stepped ? sq : insp, stepped, step, docked, dock: dk, moving: !!tw, looping: !!raf, visible, heading: [Math.atan2(d.x, d.z) / D2R, Math.atan2(d.y, Math.hypot(d.x, d.z)) / D2R, d.length()], motorHeight: motorH, triangles: tris, props: props.length, pixelRatio: renderer.getPixelRatio(), edgePass: [rt.width, rt.height], tiles: T.nx * T.ny }; },
-      destroy() { alive = false; if (raf) cancelAnimationFrame(raf); for (const o of rowIOs) o.disconnect(); if (endIO) endIO.disconnect(); clearInterval(themeWatch); io.disconnect(); removeEventListener('scroll', onScroll); if (ro) ro.disconnect(); else removeEventListener('resize', frame); rt.dispose(); renderer.dispose(); renderer.domElement.remove(); }
+      destroy() { alive = false; if (raf) cancelAnimationFrame(raf); for (const o of rowIOs) o.disconnect(); if (endIO) endIO.disconnect(); clearInterval(themeWatch); if (themeMO) themeMO.disconnect(); io.disconnect(); removeEventListener('scroll', onScroll); if (ro) ro.disconnect(); else removeEventListener('resize', frame); rt.dispose(); renderer.dispose(); renderer.domElement.remove(); }
     };
   }
 
@@ -824,9 +858,10 @@
       return pump();
     });
     const script = () => { st.scripts++; tell(); };
-    return Promise.all([loadThree().then(script).then(() => loadScript(CONFIG.loader, () => !!(global.THREE && global.THREE.GLTFLoader))).then(script), bytes])
-      .then(([, buf]) => new Promise((res, rej) => new global.THREE.GLTFLoader().parse(buf, url.replace(/[^/]*$/, ''), res, rej)))
+    const decoder = CONFIG.meshopt ? loadScript(CONFIG.meshopt, () => !!global.MeshoptDecoder) : Promise.resolve();   // standalone, so it comes in with three.js rather than after it
+    return Promise.all([loadThree().then(script).then(() => loadScript(CONFIG.loader, () => !!(global.THREE && global.THREE.GLTFLoader))).then(script), bytes, decoder])
+      .then(([, buf]) => new Promise((res, rej) => { const ld = new global.THREE.GLTFLoader(); if (global.MeshoptDecoder) ld.setMeshoptDecoder(global.MeshoptDecoder); ld.parse(buf, url.replace(/[^/]*$/, ''), res, rej); }))
       .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.20.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.24.0' };
 })(typeof window !== 'undefined' ? window : this);
