@@ -68,8 +68,8 @@
      hidden there. Up to 991px the inspection is one restrained move, not three states: its three poses are points
      on a single arc round the motor (no isolate, no row of copies), so the camera orbits slowly as the claims pass
      in a tight stack; a 3rem fade (.hero-drone_fade, data-drone-dock, shown only while docked) softens the band's
-     bottom edge so the copy dissolves under it rather than being sliced; the spec strip (.product_spec-list,
-     narrow only), the Request Spec Sheet button and the concept label follow the claims, and the band lets go
+     bottom edge so the copy dissolves under it rather than being sliced; the Request Spec Sheet button and the
+     concept label follow the claims, and the band lets go
      with the section's end, straight into Purpose. Desktop keeps the three states described above.
      Then, with inspect.follow 'scroll' (as now), the camera scrubs with the scroll, damped,
      reaching each pose as its row's top meets 68% of the viewport (arrival, 01, 02, 03 at the ends of the
@@ -80,7 +80,7 @@
      scroll after the arrival. The same classes, bars and drone:reach events as above either way. The
      propellers' idle turn stops with the approach. The canvas draws a frame only when something visible
      changes (the scroll, a turning propeller, the flag); once the drone has gone, nothing. On touch devices
-     it renders at a pixel ratio of up to 1.5 (the docked band at up to 2), with no frame cap, and
+     it renders at a pixel ratio of up to 2 (the docked band at the device's own), with no frame cap, and
      nothing in the page's layout is touched while it scrolls (the fill is a transform, and written in
      steps of 0.02 there). The propellers (the model's own tri-blades, their blades lined up so they read as
      a set) idle very slowly on desktop and speed up a little with the scroll; up to 991px they only turn with the scroll. Lines come from a supersampled
@@ -90,15 +90,15 @@
      The load feeds the page's preloader (head code): onProgress reports the model's bytes, three.js, the
      loader and the build, and the mount's promise is tracked, so the preloader lifts once the drone is drawn. -->
 <div id="hero-drone" style="width:100%;height:100%;--topo-block:var(--_theme---background-01);--topo-label:var(--_theme---text-01);--topo-label-secondary:var(--_theme---map-boundary);--drone-grid:var(--_theme---text-03)"></div>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@5dbb0ba/drone-hero.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@ee57e3b/drone-hero.js"></script>
 <script>
   var hwPre = window.hwPreloader;
-  // up to 991px (the narrow layout) and on touch devices the drone is set up once, at load: no idle propeller
-  // turn (the props only follow the scroll), a smaller flag hung higher, the drone a touch closer, and less
-  // work per frame (a lower pixel ratio, a lighter edge pass, the docked band at 2x, no double-drawn crossfade)
-  var hwNarrow = matchMedia('(max-width: 991px)').matches, hwCoarse = matchMedia('(pointer: coarse)').matches;
+  // up to 991px (the narrow layout) the drone is set up once, at load: no idle propeller turn (the props only
+  // follow the scroll), a smaller flag hung higher, the drone a touch closer
+  var hwNarrow = matchMedia('(max-width: 991px)').matches;
   var hwDrone = window.DroneHero ? DroneHero.mount('#hero-drone', {
     onProgress: hwPre && hwPre.drone,     // the preloader's bar follows the real load (drone-hero.js 3.20)
+    meshopt: '',                          // the model is uncompressed, so the meshopt decoder is not fetched
     focus: 'FR',                          // the motor the path ends on. HWI's model names the arms from the pilot's seat, so FR is the front motor on the camera's left, seen from the front (FL, BR, BL for the others)
     props: 'model',                       // the model's own tri-blade propellers, turning about their hubs (rather than blades generated in their place)…
     propPhase: 60,                        // … their blades all starting at this heading (0 = a blade straight back from the opening view; the arms are turned copies in the model, so each is measured and lined up): at 60 they sweep sideways, and none points at the camera, where a blade's pitch reads as a twisted stub over the hub
@@ -125,14 +125,11 @@
     propSeconds: hwNarrow ? 0 : 40,       // the propellers idle at one turn every 40 seconds on desktop; in the narrow layout they hold still and only turn with the scroll (0 = still)
     propScroll: 0.12,                     // … and add an eighth of a turn per 1000px scrolled
     grid: 1, gridExtent: 24,              // the floor grid's cell (motor heights) and how far it reaches from the drone's centre
-    pixelRatioCapCoarse: 1.5, fpsCoarse: 0,   // touch devices: the canvas's pixel ratio, and no frame cap (it only draws while something moves, so the scroll scrubs at the screen's rate)
-    supersample: hwCoarse ? 1.25 : 2,     // the edge pass's supersampling: 2x on desktop; 1.25x on touch devices, about a third of the fill of 2x and still antialiased
-    flagFpsCoarse: 30,                    // touch devices: the flag's wave steps at 30 a second (drone-hero.js 3.21+)
+    pixelRatioCapCoarse: 2, fpsCoarse: 0,   // touch devices: the canvas's pixel ratio (the docked band goes up to the device's own) and no frame cap (it only draws while something moves); lower either if a phone stutters
+    flagFpsCoarse: 0,                     // touch devices: the flag waves every frame, as on desktop (drone-hero.js 3.21+; 30 would step it at 30 a second)
     inspect: Object.assign({              // the inspection over the product track's scroll (on desktop the poses, isolate, crossfade, copies and easeOut are the library's defaults; see the README to change them)
       windows: [[0.25, 0.5], [0.5, 0.75], [0.75, 1]],   // of that scroll (500svh): the first quarter the intro, then a quarter each for 01, 02 and 03 — each stage's move fills its quarter, and each row gets drone:reach as its window begins. Up to 991px the states are the ends of these windows
       follow: 'scroll',                   // up to 991px: the camera scrubs with the scroll, reaching each pose as its row meets the line. To go back to the stepped version (a one-second move per row, still between), delete this line (or set 'tween')
-      dockPixelRatio: 2,                  // the docked band's pixel ratio (the library's 3 drew as many pixels as the whole canvas)
-      crossfade: !hwCoarse,               // touch devices: the rest of the drone fades by its lines' alpha instead of drawing every frame twice
       dock: 0.42,                         // up to 991px: the band the canvas docks to at the arrival, as a share of its height (keep in step with .hero-drone_sticky's height, .section_hero's top margin and .product_panel's top margin there)
       click: true                         // a click on a row scrolls the page to its window (up to 991px: brings the row to the trigger line)
     }, hwNarrow ? {                       // up to 991px: one restrained move instead of three states. The three poses are points on a single arc round the

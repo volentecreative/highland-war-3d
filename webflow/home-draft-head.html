@@ -94,9 +94,9 @@
   api.report = function (name, f) { if (pending[name]) set(name, f); };
 
   /* the drone: drone-hero.js's onProgress state -> 0..1 (scripts 15%, model bytes 75%, build 10%). Without a
-     size from the server the bytes count against the model's known size (342 KB, meshopt-compressed), and never past 90% of their share. */
+     size from the server the bytes count against the model's known size, and never past 90% of their share. */
   api.drone = function (s) {
-    var b = s.total ? s.loaded / s.total : Math.min(0.9, s.loaded / 341568);
+    var b = s.total ? s.loaded / s.total : Math.min(0.9, s.loaded / 2651372);
     api.report('drone', (s.scripts / 2) * 0.15 + b * 0.75 + (s.built ? 0.1 : 0));
   };
 
