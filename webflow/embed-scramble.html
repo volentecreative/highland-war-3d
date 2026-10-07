@@ -1,8 +1,11 @@
 <script>
 /* ============================================================
-   scramble.js — v2.5.0
+   scramble.js — v2.5.1
    Text scramble / cycle-in, triggered on scroll-into-view (or on
    a DOM event). No dependencies. No Webflow Interactions.
+
+   v2.5.1: a frame writes only the cells whose glyph changed (settled
+   cells are left alone), so a long run touches far less of the DOM.
 
    v2.5.0: runs wait for the page's preloader (window.hwPreloader.done,
    from the head code) before they start, so nothing plays under the
@@ -251,7 +254,7 @@
     if (!this.cells) { this.el.textContent = out.join(''); return; }
     for (var i = 0; i < out.length; i++) {
       var ci = this.cellIndex[i];
-      if (ci >= 0 && this.cells[ci]) this.cells[ci].textContent = out[i];
+      if (ci >= 0 && this.cells[ci] && this.cells[ci].textContent !== out[i]) this.cells[ci].textContent = out[i];   // only the cells whose glyph changed
     }
   };
 

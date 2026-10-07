@@ -851,5 +851,5 @@
       .then(([, buf]) => new Promise((res, rej) => new global.THREE.GLTFLoader().parse(buf, url.replace(/[^/]*$/, ''), res, rej)))
       .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.21.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.22.0' };
 })(typeof window !== 'undefined' ? window : this);
