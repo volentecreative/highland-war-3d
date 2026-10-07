@@ -566,8 +566,13 @@
     const orbitF = p => { if (!stepped || !inspect || !(+inspect.orbitSeconds > 0) || reduced) return 0; const A = +inspect.arriveAt > 0 && +inspect.arriveAt < 1 ? +inspect.arriveAt : 1, w = Array.isArray(inspect.orbitScroll) ? inspect.orbitScroll : [Math.max(0, A - 0.2), A];
       if (p <= w[0]) return 0; if (p >= w[1]) return 1; const u = (p - w[0]) / Math.max(1e-6, w[1] - w[0]); return u * u * (3 - 2 * u); };
     let orbVel = 0, orbWas = false;   // the spring back home: its velocity (degrees/s), and whether the orbit was running last frame
+    // on the way back up, the heading goes home first, along the orbit's own track (the camera held at the landed view, at its distance),
+    // the short way round; only then does the approach play back. scrollDown: the way the scroll last went; unwinding: on the way home
+    let scrollDown = true, lastPT = 0, unwinding = false;
+    const holding = () => unwinding && Math.abs(orb) > 2;   // released for the last couple of degrees, which the spring finishes as the approach begins to play back, so there is no pause
+    const camP = () => holding() ? 1 : arrive(progressTarget);   // the camera's place on the approach: held at the landing while it unwinds
     const orbiting = () => visible && orbitF(progressTarget) > 0;
-    const orbReturning = () => stepped && (orb !== 0 || orbVel !== 0) && orbitF(progressTarget) === 0;
+    const orbReturning = () => stepped && (orb !== 0 || orbVel !== 0) && (unwinding || orbitF(progressTarget) === 0);
     const orbitDir = () => { const d = inspect.orbitDirection; if (d === 1 || d === -1) return d; return azimuth() - azimuth0() < 0 ? -1 : 1; };
     const arrive = p => { const A = inspect && +inspect.arriveAt; return stepped && A > 0 && A < 1 ? Math.min(1, p / A) : p; };   // the camera's share of the approach
     let dk = 0, docked = false, dockBg = '';   // the dock: 0 = the full canvas, 1 = the band; docked = the canvas has been resized to the band
@@ -586,7 +591,7 @@
     }
     // the rows count only once the drone has arrived; the dock follows the arrival too
     function updateGate() {
-      const cp = arrive(progressTarget), g = cp >= 0.999 ? true : cp < 0.97 ? false : gate; gate = g;
+      const cp = camP(), g = cp >= 0.999 ? true : cp < 0.97 ? false : gate; gate = g;
       if (!follow()) { const k = g ? (inspect.auto ? inspect.poses.length : rowStep) : 0; if (k !== step) goStep(k); }
       const dg = progressTarget >= 0.999 ? true : progressTarget < 0.995 ? false : dk === 1;   // its own, narrow hysteresis: a resize each way, so not on every pixel
       const d = dg && dockF() < 1 ? 1 : 0; if (d !== dk) setDock(d);
@@ -837,7 +842,8 @@
       if (SC) { wake(); return; }   // a showcase does not follow the scroll
       if (stepped) {   // the approach follows the scroll until the end element has gone by; after that the scroll is not read (the props stop with it)
         if (liveApproach) { spinTarget = (global.scrollY || 0) / 1000 * (+CONFIG.propScroll || 0) * Math.PI * 2; progressTarget = readProgress(); } else progressTarget = 1;
-        inspTarget = 0; posTarget = arrive(progressTarget); updateGate(); if (follow()) readFollow(); wake(); if (!liveApproach) return;
+        if (progressTarget !== lastPT) { scrollDown = progressTarget > lastPT; lastPT = progressTarget; }
+        inspTarget = 0; posTarget = camP(); updateGate(); if (follow()) readFollow(); wake(); if (!liveApproach) return;
       } else { spinTarget = (global.scrollY || 0) / 1000 * (+CONFIG.propScroll || 0) * Math.PI * 2; progressTarget = trackEl ? readProgress() : 1; inspTarget = readInspect(); posTarget = progressTarget + inspTarget; }
       setVar(CONFIG.scrollVar, ease(progressTarget), 3); wake();
       if (trackEl && CONFIG.exitVar) { const tr = trackEl.getBoundingClientRect(), hr = host.getBoundingClientRect(); const ex = Math.min(1, Math.max(0, 1 - (tr.bottom - hr.top) / Math.max(1, hr.height))).toFixed(4); host.style.setProperty(CONFIG.exitVar, ex); trackEl.style.setProperty(CONFIG.exitVar, ex); } };
@@ -854,13 +860,16 @@
       if (stepped && follow() && sq !== fq) { sq = reduced ? fq : sq + (fq - sq) * Math.min(1, (+CONFIG.damping || 0.12) * dt * 60); if (Math.abs(fq - sq) < 1e-5) sq = fq; shownPos = -1; }   // following: damped as the approach is
       if (tw) { const u = Math.min(1, (now - tw.t0) / tw.dur); stepU = u; sq = tw.from + (tw.to - tw.from) * easeIO(u); if (u >= 1) { sq = tw.to; tw = null; } shownPos = -1; }
       if (stepped && inspect) {   // the orbit: its speed follows the scroll in (orbitF), the turn itself runs in time; back out, it springs home
-        const f = orbitF(progressTarget);
-        if (f > 0) { if (visible) { orb += orbitDir() * f * dt * 360 / +inspect.orbitSeconds; shownPos = -1; } orbVel = 0; orbWas = true; }
+        const f = orbitF(progressTarget), wasHolding = holding();
+        if (!unwinding && !scrollDown && arrive(progressTarget) < 0.999 && orb !== 0) { unwinding = true; orb = ((orb % 360) + 540) % 360 - 180; orbVel = 0; orbWas = false; }   // heading home: the short way round
+        else if (unwinding && (orb === 0 || (scrollDown && f > 0))) unwinding = false;   // home, or back down into the orbit
+        if (f > 0 && !unwinding) { if (visible) { orb += orbitDir() * f * dt * 360 / +inspect.orbitSeconds; shownPos = -1; } orbVel = 0; orbWas = true; }
         else if (orb !== 0 || orbVel !== 0) {
           if (orbWas) { orb = ((orb % 360) + 540) % 360 - 180; orbVel = 0; orbWas = false; }   // the short way round
           const w = 2 * Math.PI / Math.max(0.3, +inspect.orbitReturnSeconds || 1.6), n = Math.min(12, Math.ceil(dt / 0.02)), h = dt / Math.max(1, n);
           for (let k = 0; k < n; k++) { orbVel += (-w * w * orb - 2 * w * orbVel) * h; orb += orbVel * h; }
-          if (Math.abs(orb) < 1e-3 && Math.abs(orbVel) < 1e-3) { orb = 0; orbVel = 0; } shownPos = -1; } }
+          if (Math.abs(orb) < 1e-3 && Math.abs(orbVel) < 1e-3) { orb = 0; orbVel = 0; } shownPos = -1; }
+        if (wasHolding !== holding()) { posTarget = camP(); updateGate(); } }   // released at home: the approach now follows the scroll back up (damped, so it glides)
       if (SC && scT0 != null) {   // the showcase: the move by the clock, then the orbit
         const u = reduced ? 1 : Math.min(1, Math.max(0, (now - scT0) / Math.max(1, +SC.duration || 2200))), q = u * u * u * (u * (u * 6 - 15) + 10);   // smootherstep: it eases in and comes to rest
         if (1 + q !== pos) { posTarget = pos = 1 + q; insp = q; }
@@ -945,5 +954,5 @@
       .then(([, buf]) => new Promise((res, rej) => { const ld = new global.THREE.GLTFLoader(); if (global.MeshoptDecoder) ld.setMeshoptDecoder(global.MeshoptDecoder); ld.parse(buf, url.replace(/[^/]*$/, ''), res, rej); }))
       .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.28.1' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.29.0' };
 })(typeof window !== 'undefined' ? window : this);
