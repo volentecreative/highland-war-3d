@@ -1,7 +1,9 @@
 <!-- Gainesboro descent: the scroll-driven topo map (topo-turntable.js, pinned to a commit).
      Custom code because it is a WebGL scene; it is the only script in this section.
-     Nothing of it loads until the section is within 1.5 viewports of the screen (lazy): the terrain grids and
-     the lines are about a megabyte, and they are far down the page.
+     Nothing of it loads until the hero drone has finished loading (lazyAfter: then in the next idle moment, so
+     the map is built while the visitor is still at the top and a fast scroll never reaches it unbuilt) or the
+     section comes within 1.5 viewports of the screen (lazy), whichever is first: the terrain grids and the
+     lines are about a megabyte, and they are far down the page.
      The sticky track is .section_topo-descent - the descent follows that section's scroll, and lands a
      quarter of a viewport before the section's end (approachTail; the section is 425svh tall), so the
      landing is a rest rather than the edge.
@@ -15,9 +17,12 @@
      overflows the sides, and the copy sits over the bottom of it); `focus` is where on the canvas the county
      lands (fractions of width and height), so it is responsive by construction. The move there is spread
      over 10-75% of the descent, so it reads as the camera aiming where it is going rather than a late slide.
-     On desktop the canvas renders at the screen's own pixel ratio (up to 2x), so the contour lines are drawn
-     at full resolution. On touch devices it renders at 1.25x and at most 30 frames a second (fpsCoarse), the
-     labels are placed with transforms and the canvas is only resized on a real size change, so nothing in
+     Up to 991px the globe opens 15% smaller than its height-fitted size (globeScaleNarrow), so less of it runs
+     off the sides, and the roads and water come in at the same point of the descent as on desktop
+     (fineAspectMin: the ground the frame spans is read as if it were desktop-shaped).
+     The canvas renders at the screen's own pixel ratio up to 2x on desktop and on touch devices alike
+     (pixelRatioCapCoarse), so the contour lines are as crisp on a phone, with no frame cap there (fpsCoarse 60);
+     the labels are placed with transforms and the canvas is only resized on a real size change, so nothing in
      the layout is touched while the page scrolls. -->
 <div id="topo-descent" style="width:100%;height:100%;
   --topo-line:            var(--_theme---map-line);
@@ -31,13 +36,14 @@
   --topo-label-secondary: var(--_theme---text-03);
   --topo-bg:              transparent;"></div>
 
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@de72dd0/topo-turntable.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@3abcee5/topo-turntable.js"></script>
 <script>
   TopoTurntable.mount('#topo-descent', {
     approach:       true,                       // open on the globe and descend as the section scrolls
     approachScroll: '.section_topo-descent',    // the tall sticky track the stage is stuck inside
     approachTail:   0.25,                       // the descent lands this many viewports before the track's end, and rests there
-    lazy:           1.5,                        // load once the section is within this many viewports of the screen
+    lazy:           1.5,                        // load once the section is within this many viewports of the screen…
+    lazyAfter:      window.hwDrone,             // … or once the hero drone has loaded, when the page is idle (topo-turntable 2.4)
     roads:          true,
     water:          true,
     rotateSeconds:  120,                        // the turntable: begins turning at 90% of the scroll, full speed by 100%
@@ -47,6 +53,9 @@
     focus:       { x: 0.75, y: 0.5 },           // desktop: the county lands in the centre of the right half
     focusNarrow: { x: 0.5,  y: 0.42 },          // up to 991px: the middle of the section, a touch high so it clears the copy over the bottom
     focusStart: 0.1, focusEnd: 0.75,            // the move to that point runs over this window of the descent
+    globeScaleNarrow: 0.85,                     // up to 991px: the opening globe 15% smaller (topo-turntable 2.4)
+    fineAspectMin: 1.6,                         // the roads and water appear at the same point of the descent as on a 16:10 desktop screen
+    pixelRatioCapCoarse: 2, fpsCoarse: 60,      // touch devices: drawn at up to 2x, every frame
     stage: {
       reveal: '.topo-descent_text-wrapper',     // the copy fades in over the same window the focus moves in
       start:  0.45, end: 0.7

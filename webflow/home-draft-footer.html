@@ -6,18 +6,50 @@
   .ethos-card.is-active > [class*="corner-dot-"] { background-color: var(--_theme---border-02); }
 </style>
 <script>
-/* Ethos cards, up to 991px: a card crossing the middle of the screen gets is-active (a quick scale-up and the
-   border-02 border, styled as .ethos-card.is-active in the Designer at the tablet breakpoint and down) and loses
-   it as it moves on. Above 991px the class is never set. */
+/* Ethos cards, up to 991px: the card crossing the middle of the screen gets is-active (its border and corner dots go to
+   border-02, styled as .ethos-card.is-active in the Designer at the tablet breakpoint and down) and its 3D mark plays
+   its hover animation (iso-marks.js listens for focusin / focusout on the card, so those are sent); as the card moves on,
+   either way, the class comes off and the mark plays back. A touch on a card no longer toggles the mark there, so a
+   scroll that starts on a card cannot set it off. Above 991px the class is never set and the marks follow the hover. */
 (function () {
   if (!('IntersectionObserver' in window)) return;
   var cards = document.querySelectorAll('.ethos-card');
   if (!cards.length) return;
   var narrow = window.matchMedia('(max-width: 991px)');
   var io = new IntersectionObserver(function (entries) {
-    entries.forEach(function (e) { e.target.classList.toggle('is-active', narrow.matches && e.isIntersecting); });
+    entries.forEach(function (e) {
+      var on = narrow.matches && e.isIntersecting, card = e.target;
+      if (card.classList.contains('is-active') === on) return;
+      card.classList.toggle('is-active', on);
+      card.dispatchEvent(new FocusEvent(on ? 'focusin' : 'focusout', { bubbles: true }));
+    });
   }, { rootMargin: '-42% 0px -42% 0px' });   // the middle 16% of the viewport
   [].forEach.call(cards, function (c) { io.observe(c); });
+  document.addEventListener('pointerdown', function (e) {
+    if (narrow.matches && e.pointerType === 'touch' && e.target.closest && e.target.closest('.ethos-card')) e.stopPropagation();
+  }, true);
+})();
+
+/* The docked band's product name (.hero-drone_name, up to 991px): hidden while the product title (.product_title) can
+   still be seen, and faded in (is-shown, a combo class: opacity and its transition are in the Designer) once the
+   title has scrolled up under the band; out again when it comes back down. The band's bottom is the sticky holder's
+   (the navbar's height plus 42% of the rest of the screen), so the observer's top edge is set to it, and reset on a
+   resize. */
+(function () {
+  var name = document.querySelector('.hero-drone_name'), title = document.querySelector('.product_title'), band = document.querySelector('.hero-drone_sticky');
+  if (!name || !title || !band || !('IntersectionObserver' in window)) return;
+  var io = null;
+  function watch() {
+    if (io) io.disconnect();
+    var nav = document.querySelector('.navbar_component'), edge = Math.round((nav ? nav.offsetHeight : 0) + band.offsetHeight);
+    io = new IntersectionObserver(function (entries) {
+      var e = entries[entries.length - 1];
+      name.classList.toggle('is-shown', !e.isIntersecting && e.boundingClientRect.top < edge);
+    }, { rootMargin: '-' + edge + 'px 0px 0px 0px' });
+    io.observe(title);
+  }
+  watch();
+  var t = 0; window.addEventListener('resize', function () { clearTimeout(t); t = setTimeout(watch, 200); });
 })();
 
 /* Background videos (the purpose section's archive footage): play whenever they are near the screen and pause

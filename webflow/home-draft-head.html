@@ -6,14 +6,15 @@
 <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
 <!-- Up to 991px the product copy rides over the drone until the drone docks into the band at the top
      (drone-hero.js puts is-docked on .hero-drone_track and on #hero-drone), then slides under the band.
-     The band keeps the copy's top border as its own bottom line (a shadow, so it adds no height).
-     While the mobile menu is open the band's labels (the eyebrow and the dim TALOS) are hidden, so they never
+     The line under the band is the copy's own top edge (.product_seam, a 1px sticky div at the top of .product_panel,
+     styled in the Designer): it scrolls up with the copy and sticks at the band's bottom, so there is only ever one line
+     and the browser holds it there itself, with no script in the way on a fast scroll.
+     While the mobile menu is open the band's labels (the eyebrow and the dim RIDGE) are hidden, so they never
      show through the menu's dim over the hero; custom code because the open state is on the navbar, not an
      ancestor of the labels (:has). -->
 <style>
   @media (max-width: 991px) {
     .hero-drone_track.is-docked .section_product { z-index: -1; }
-    #hero-drone.is-docked { box-shadow: 0 1px 0 var(--_theme---border-01); }
     html:has(.navbar_menu.is-open) .hero-drone_labels { visibility: hidden; }
   }
 </style>
