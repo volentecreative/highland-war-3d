@@ -103,14 +103,15 @@
      part of the drone (it has the page background and a 1px border-01 line along its top), follows right under the band.
      The approach there flies straight from the opening view to the isometric view, from above (azimuth -45, elevation 32),
      and lands with the last fifth of that scroll to go (inspect.arriveAt 0.8, drone-hero.js 3.27), so the view has settled
-     before the band locks; with no rows (inspect.auto) the rest of the drone then dissolves round the motor over 1.4s
-     (isolate). The camera's slow turn round the motor (a turn every 40s, on in the direction the approach was turning) works
+     before the band locks; with no rows (inspect.auto) the rest of the drone dissolves round the motor over the last of the
+     approach, on the scroll (inspect.dissolveScroll 0.65-0.8, damped as the approach, both ways; drone-hero.js 3.31). The camera's slow turn round the motor (a turn every 40s, on in the direction the approach was turning) works
      as the topo map's turntable: its speed follows the scroll in, from nothing at 55% of the way to full speed at the landing
      (inspect.orbitScroll, drone-hero.js 3.28), so the approach flows straight into the turn without stopping, and it keeps
      turning for as long as the band is on screen. Scrolled back up, the way out mirrors the way in, on the scroll alone: the
      heading unwinds along the orbit's own track, the short way round and at the same height and distance, in step with the
-     scroll, and is home exactly where the camera landed (drone-hero.js 3.30); from there the drone comes back and the approach
-     plays in reverse. The band draws at a pixel ratio of up to 2. -->
+     scroll (damped as the approach), and is home exactly where the camera landed (drone-hero.js 3.30); from there the drone
+     comes back and the approach plays in reverse. Paused on the way up, it holds; left still back on the track, the turn
+     eases up again. The band draws at a pixel ratio of up to 2. -->
 <div id="hero-drone" style="width:100%;height:100%;--topo-block:var(--_theme---background-01);--topo-label:var(--_theme---text-01);--topo-label-secondary:var(--_theme---map-boundary);--drone-grid:var(--_theme---text-03)"></div>
 <!-- The poster frame: a still of the drone's first frame, the drone alone (posters/ in the repo, one per layout and theme, chosen here
      before it paints), over the canvas while the page's load gate is up; it fades into the live canvas (the flag fades in with it) when the gate
@@ -124,7 +125,7 @@
     img.src = 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@f269731/posters/drone-start-' + (n ? 'narrow' : 'wide') + '-' + t + '.webp';
   })();
 </script>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@10d8666/drone-hero.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@4465688/drone-hero.js"></script>
 <script>
   var hwPre = window.hwPreloader;
   // up to 991px (the narrow layout) the drone is set up once, at load: no idle propeller turn (the props only
@@ -169,7 +170,7 @@
       rows: '', copies: null, callouts: false, click: false, fillVar: '', activeVar: '', reachEvent: '', unreachEvent: '', easeOut: 0,
       steps: true, auto: true,            // stepped, and the move plays by itself once the drone has arrived…
       arriveAt: 0.8,                      // … which is with a fifth of the scroll still to go before the band locks: the camera has landed and is orbiting while the copy rises to meet it…
-      tween: 1400,                        // … over this many ms…
+      dissolveScroll: [0.65, 0.8],        // … the rest of the drone dissolving round the motor over the last of the approach (65% to the landing at 80%), on the scroll both ways…
       orbitSeconds: 40,                   // … and it turns slowly round the motor, a turn every 40s, on in the direction the approach was turning (orbitDirection 'approach'),
       orbitScroll: [0.55, 0.8],           // … its speed following the scroll in, as the topo map's turntable: nothing until 55% of the way, full speed by the landing (80%), so the approach runs straight on into the turn
       dock: 0.42,                         // the band the canvas docks to at the arrival, as a share of its height (keep in step with .hero-drone_sticky's height, .section_hero's top margin and .product_track's height there)
