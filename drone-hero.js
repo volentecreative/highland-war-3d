@@ -104,6 +104,18 @@
     fpsCoarse: 30,
     themeFade: 200,            // ms over which the colours follow a light/dark switch (the site's own html/body transition is .2s); 0 = snap
     sampleCapCoarse: 4,        // on touch devices the edge pass's resolution is at most this many times the canvas's CSS pixels (pixel ratio x supersample): at a pixel ratio of 3 (the docked band on a phone) it supersamples 1.33x rather than 2x — the same sharpness on screen at under half the fill, so the scroll keeps its frame rate; 0 = no cap
+    // sequence: up to `breakpoint`, while the canvas is docked, the inspection is drawn from pre-rendered frames instead of the live
+    // scene (a 2D canvas over it, the frame chosen by the inspection's place): no WebGL work at all while the copy scrolls under the band.
+    // { url: '…/{theme}/{i}.webp' ({theme} = 'dark' or 'light' from <html>'s theme-light class, {i} zero-padded to `pad`), frames, pad,
+    //   maxWidth (px; wider bands keep the live scene), aspect: [min, max] of the band's width / height to use it in, after: a promise to
+    //   wait for before the frames are fetched (then in the next idle moment) }. Until the frames for the current theme are in, or if any
+    //   fails, the live scene draws as before. null = none
+    sequence: null,
+    // showcase: no scroll path at all; the canvas holds the arrival view (azimuth / elevation / zoom / point) and, once it is `threshold`
+    // in view, plays a timed move to `pose` over `duration` ms (the rest of the drone dissolving over `isolate`, as a share of the move),
+    // then orbits the motor once every `orbitSeconds` while it is on screen. { pose: { azimuth, elevation, zoom, zoomNarrow }, isolate,
+    // duration, delay, orbitSeconds, threshold }. null = none
+    showcase: null,
     flagFpsCoarse: 30          // on touch devices the flag's wave (rebuilt on the CPU) steps at most this many times a second; 0 = every frame
   };
   const COLOR_KEYS = ['primary', 'secondary', 'gridColor', 'face', 'background'];
@@ -296,7 +308,10 @@
       for (let i = 0; i < n; i++) { for (let k = 0; k < 4; k++) { const v = i * 4 + k; for (let j = 0; j < 3; j++) { A[v * 3 + j] = segs[i * 6 + j]; B[v * 3 + j] = segs[i * 6 + 3 + j]; } C[v * 2] = k >> 1; C[v * 2 + 1] = (k & 1) ? 1 : -1; } const b = i * 4; idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2); }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(A, 3)); g.setAttribute('pointA', new THREE.BufferAttribute(A, 3)); g.setAttribute('pointB', new THREE.BufferAttribute(B, 3)); g.setAttribute('corner', new THREE.BufferAttribute(C, 2)); g.setIndex(idx);
       const m = new THREE.Mesh(g, mat); m.frustumCulled = false; m.userData.isLines = true; return m; };
-    const inspect = CONFIG.inspect ? Object.assign({}, INSPECT, CONFIG.inspect) : null;   // the inspection's options (used from the build on: the motor copies are geometry)
+    const SC = CONFIG.showcase ? Object.assign({ isolate: [0, 0.7], duration: 2200, delay: 150, orbitSeconds: 60, threshold: 0.5 }, CONFIG.showcase) : null;
+    // a showcase is a one-pose inspection, played by time rather than scroll: no rows, no copies, no steps
+    const inspect = SC ? Object.assign({}, INSPECT, { poses: [Object.assign({ azimuth: -45, elevation: 30, zoom: 0.4 }, SC.pose || {})], windows: [[0, 1]], isolate: SC.isolate, copies: null, rows: '', steps: false, callouts: false, click: false, fillVar: '', activeVar: '', reachEvent: '', unreachEvent: '', easeOut: 0 })
+      : CONFIG.inspect ? Object.assign({}, INSPECT, CONFIG.inspect) : null;   // the inspection's options (used from the build on: the motor copies are geometry)
     // part ids, by kind: the rest of the drone counts up from 1, the flag is 110; from the top down, once the model is read: the
     // focused motor's parts from 255, then the other motors', then the motor copies, down to 154 (the edge pass colours ids
     // above 153 primary, and fades each kind on its own; the bands' bounds go to it as uniforms)
@@ -670,7 +685,7 @@
     function place() {
       const P = curPos(), useInsp = !!inspect, p = Math.min(1, P), e = ease(p), q = useInsp ? Math.max(0, P - 1) : 0;
       let cpos = useInsp ? P : p; if (useInsp) { const WL = inspect.windows[inspect.windows.length - 1] || [0, 1], L = inspect.easeOut == null ? WL[1] - WL[0] : +inspect.easeOut; if (L > 0 && P > 2 - L) { const u = Math.min(1, (P - (2 - L)) / L); cpos = 2 - L + L * (u + u * u - u * u * u); } }   // the last stretch eased out: the camera's speed falls smoothly to nothing at the end (easeOut)
-      const c = camAt(cpos, useInsp);
+      const c = camAt(cpos, useInsp); if (SC) c.az += scOrbit;   // the showcase's orbit, on top of its pose
       pivot.rotation.x = tiltRad * (1 - e); pivot.updateMatrixWorld(true);   // pitched at the top of the page, level by the arrival
       camTarget.copy(target).lerp(droneC, c.centre).applyMatrix4(rig.matrixWorld);   // the look-at point, as the tilt has moved it
       const fn = CONFIG.fovNarrow != null && isNarrow() ? +CONFIG.fovNarrow : NaN, f0 = +CONFIG.fov || 30; camera.fov = fn > 0 ? f0 + (fn - f0) * e : f0;   // the lens widens over the approach on narrow screens (the distances stay those of `fov`)
@@ -702,7 +717,7 @@
       // the feature rows
       const active = s ? s.active : -1;
       if (active !== activeRow && rows) { activeRow = active; for (const r of rows) { const on = r.n === active + 1; r.el.classList.toggle(inspect.activeClass || 'is-active', on); if (inspect.activeVar) r.el.style.setProperty(inspect.activeVar, on ? '1' : '0'); } }
-      if (rows && inspect.fillVar) { const nr = isNarrow(); for (const r of rows) { const v = s ? s.fills[r.n - 1] || 0 : 0, f = (nr ? Math.round(v * 50) / 50 : v).toFixed(2); if (r.fill !== f) { r.fill = f; r.el.style.setProperty(inspect.fillVar, f); } } }
+      if (rows && inspect.fillVar) { const nr = isNarrow(); for (const r of rows) { const v = s ? s.fills[r.n - 1] || 0 : 0, f = (nr ? Math.round(v * 200) / 200 : v).toFixed(3); if (r.fill !== f) { r.fill = f; r.el.style.setProperty(inspect.fillVar, f); } } }
       if (rows) for (const r of rows) { const w = inspect.windows[r.n - 1]; if (!w) continue; const reached = stepped ? r.n <= step : q >= w[0] ? true : q < w[0] - 0.02 ? false : !!r.reached; if (reached !== !!r.reached) { r.reached = reached; const n = reached ? inspect.reachEvent : inspect.unreachEvent; if (n) r.el.dispatchEvent(new CustomEvent(n, { bubbles: true })); } }
       dirty = true; shownPos = P;
       if (endEl) { const a = P >= 0.98 ? true : P < 0.9 ? false : arrived; if (a !== arrived) { arrived = a; const n = a ? CONFIG.arriveEvent : CONFIG.leaveEvent; if (n) endEl.dispatchEvent(new CustomEvent(n, { bubbles: true })); } }
@@ -766,12 +781,40 @@
       mixMat.uniforms.tA.value = xf.a.texture; mixMat.uniforms.tB.value = xf.b.texture; mixMat.uniforms.uMix.value = a;
       quad.material = mixMat; setQuad(-1, -1, 1, 1); renderer.setRenderTarget(null); renderer.clear(); renderer.render(quadScene, quadCam); quad.material = edgeMat;
     }
+    // ---- the sequence: pre-rendered frames of the docked band, drawn on a 2D canvas over the live one (see DEFAULTS.sequence)
+    const SQ = CONFIG.sequence && CONFIG.sequence.url && +CONFIG.sequence.frames > 1 ? CONFIG.sequence : null, seqSets = {};
+    let seqCv = null, seqCtx = null, seqOn = false, seqShown = '';
+    const seqTheme = () => document.documentElement.classList.contains('theme-light') ? 'light' : 'dark';
+    const seqFits = () => { if (!SQ || !stepped || !docked) return false; const mw = +SQ.maxWidth || 560, ar = SQ.aspect || [0.9, 1.7]; return w <= mw && w / Math.max(1, h) >= ar[0] && w / Math.max(1, h) <= ar[1]; };
+    function seqLoad(theme) {
+      if (seqSets[theme]) return; const N = +SQ.frames, set = seqSets[theme] = { imgs: [], left: N, ready: false, failed: false };
+      for (let i = 0; i < N; i++) { const im = new Image(); im.decoding = 'async'; im.onload = () => { if (--set.left === 0) { set.ready = true; dirty = true; wake(); } }; im.onerror = () => { set.failed = true; };
+        im.src = SQ.url.replace('{theme}', theme).replace('{i}', String(i).padStart(+SQ.pad || 3, '0')); set.imgs.push(im); }
+    }
+    function seqUsable() {
+      if (!seqFits()) return false; const t = seqTheme(), set = seqSets[t];
+      if (!set) { if (seqStarted) seqLoad(t); return false; }
+      return set.ready && !set.failed;
+    }
+    function drawSeq() {
+      const set = seqSets[seqTheme()], N = set.imgs.length, i = Math.round(Math.min(1, Math.max(0, sq)) * (N - 1)), im = set.imgs[i];
+      if (!seqCv) { seqCv = document.createElement('canvas'); Object.assign(seqCv.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', display: 'none', pointerEvents: 'none' }); host.appendChild(seqCv); seqCtx = seqCv.getContext('2d'); }
+      const PR = Math.min(devicePixelRatio || 1, 3), W = Math.round(w * PR), H = Math.round(h * PR), key = seqTheme() + i + '|' + W + 'x' + H;
+      if (seqCv.width !== W || seqCv.height !== H) { seqCv.width = W; seqCv.height = H; }
+      if (key !== seqShown) { const k = Math.max(W / im.naturalWidth, H / im.naturalHeight), dw = im.naturalWidth * k, dh = im.naturalHeight * k;   // cover, centred: the motor sits in the band's middle
+        seqCtx.imageSmoothingQuality = 'high'; seqCtx.drawImage(im, (W - dw) / 2, (H - dh) / 2, dw, dh); seqShown = key; }
+      if (!seqOn) { seqOn = true; seqCv.style.display = 'block'; renderer.domElement.style.visibility = 'hidden'; }
+    }
+    function seqHide() { if (!seqOn) return; seqOn = false; seqShown = ''; seqCv.style.display = 'none'; renderer.domElement.style.visibility = ''; }
+    let seqStarted = false;
+    if (SQ && isNarrow()) Promise.resolve(SQ.after).catch(() => {}).then(() => { const go = () => { seqStarted = true; seqLoad(seqTheme()); }; if (global.requestIdleCallback) requestIdleCallback(go, { timeout: 3000 }); else setTimeout(go, 200); });
     // ---- the loop: the camera follows the scroll through the track, damped; the props turn with the scroll
     let dirty = true, alive = true, visible = true, lastT = performance.now(), spin = 0, spinTarget = 0, idle = 0, flagT = 0, flagLast = 0, raf = 0, inTick = false;
     // frames are asked for only while something moves: a scroll to follow, a state's move, the dock, the props or the flag; at rest there is no loop at all
     const wake = () => { if (raf || !alive) return; if (!inTick) lastT = performance.now(); raf = requestAnimationFrame(tick); };
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches, coarse = matchMedia('(pointer: coarse)').matches, frameMs = coarse && +CONFIG.fpsCoarse > 0 ? 1000 / +CONFIG.fpsCoarse : 0; let lastRender = 0;
     const onScroll = () => {
+      if (SC) { wake(); return; }   // a showcase does not follow the scroll
       if (stepped) {   // the approach follows the scroll until the end element has gone by; after that the scroll is not read (the props stop with it)
         if (liveApproach) { spinTarget = (global.scrollY || 0) / 1000 * (+CONFIG.propScroll || 0) * Math.PI * 2; progressTarget = readProgress(); } else progressTarget = 1;
         inspTarget = 0; posTarget = progressTarget; updateGate(); if (follow()) readFollow(); wake(); if (!liveApproach) return;
@@ -779,6 +822,10 @@
       setVar(CONFIG.scrollVar, ease(progressTarget), 3); wake();
       if (trackEl && CONFIG.exitVar) { const tr = trackEl.getBoundingClientRect(), hr = host.getBoundingClientRect(); const ex = Math.min(1, Math.max(0, 1 - (tr.bottom - hr.top) / Math.max(1, hr.height))).toFixed(4); host.style.setProperty(CONFIG.exitVar, ex); trackEl.style.setProperty(CONFIG.exitVar, ex); } };
     addEventListener('scroll', onScroll, { passive: true }); onScroll(); spin = spinTarget; progress = progressTarget; insp = inspTarget; pos = posTarget;
+    let scT0 = null, scOrbit = 0, scIO = null;   // the showcase: when its move starts (null = not yet), and the orbit's heading so far (degrees)
+    if (SC) { progressTarget = progress = 1; posTarget = pos = 1; insp = 0;
+      scIO = new IntersectionObserver(en => { const e = en[en.length - 1]; if (scT0 == null && e.isIntersecting && e.intersectionRatio >= (+SC.threshold || 0) - 0.01) { scT0 = performance.now() + (+SC.delay || 0); scIO.disconnect(); wake(); } }, { threshold: [0, +SC.threshold || 0] });
+      scIO.observe(host); }
     const io = new IntersectionObserver(en => { visible = en[en.length - 1].isIntersecting; if (visible) { dirty = true; wake(); } }); io.observe(host);
     function tick(now) {
       raf = 0; if (!alive) return; inTick = true;
@@ -786,6 +833,11 @@
       // a state's move: time-based, on one ease; the scroll has no hand in it
       if (stepped && follow() && sq !== fq) { sq = reduced ? fq : sq + (fq - sq) * Math.min(1, (+CONFIG.damping || 0.12) * dt * 60); if (Math.abs(fq - sq) < 1e-5) sq = fq; shownPos = -1; }   // following: damped as the approach is
       if (tw) { const u = Math.min(1, (now - tw.t0) / tw.dur); stepU = u; sq = tw.from + (tw.to - tw.from) * easeIO(u); if (u >= 1) { sq = tw.to; tw = null; } shownPos = -1; }
+      if (SC && scT0 != null) {   // the showcase: the move by the clock, then the orbit
+        const u = reduced ? 1 : Math.min(1, Math.max(0, (now - scT0) / Math.max(1, +SC.duration || 2200))), q = u * u * u * (u * (u * 6 - 15) + 10);   // smootherstep: it eases in and comes to rest
+        if (1 + q !== pos) { posTarget = pos = 1 + q; insp = q; }
+        if (u >= 1 && visible && !reduced && +SC.orbitSeconds > 0) { scOrbit += dt * 360 / +SC.orbitSeconds; shownPos = -1; }
+      }
       if (visible && posTarget !== pos) { pos = reduced ? posTarget : pos + (posTarget - pos) * Math.min(1, (+CONFIG.damping || 0.12) * dt * 60); if (Math.abs(posTarget - pos) < 1e-5) pos = posTarget; progress = Math.min(1, pos); insp = stepped ? sq : Math.max(0, pos - 1); }
       if (visible && curPos() !== shownPos) place();
       if (!reduced && visible) {
@@ -797,9 +849,9 @@
         if (flag && flag.shown) { flagT += dt; const fs = coarse && +CONFIG.flagFpsCoarse > 0 ? 1000 / +CONFIG.flagFpsCoarse : 0; if (now - flagLast >= fs - 2) { flagLast = now; flag.update(flagT); dirty = true; } }
       }
       if (colorTw) stepColors(now);
-      if (dirty && visible && now - lastRender >= frameMs - 2) { dirty = false; lastRender = now; render(); }
+      if (dirty && visible && now - lastRender >= frameMs - 2) { dirty = false; lastRender = now; if (seqUsable()) drawSeq(); else { seqHide(); render(); } }
       inTick = false;
-      const more = colorTw || tw || (stepped && follow() && sq !== fq) || (visible && (posTarget !== pos || dirty || (!reduced && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
+      const more = colorTw || tw || (SC && scT0 != null && visible && !reduced && (pos < 2 || +SC.orbitSeconds > 0)) || (stepped && follow() && sq !== fq) || (visible && (posTarget !== pos || dirty || (!reduced && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
       if (more) wake();
     }
     wake();
@@ -832,8 +884,10 @@
     return {
       set(patch) { Object.assign(CONFIG, patch || {}); for (const k of COLOR_KEYS) if (patch && k in patch) { RAW[k] = patch[k]; lastColors = ''; } edgeMat.uniforms.uDepthT.value = +CONFIG.depthEdge || 0.012; edgeMat.uniforms.uNormT.value = +CONFIG.normalEdge || 0.25; edgeMat.uniforms.uNormTM.value = CONFIG.normalEdgeMotor == null ? (+CONFIG.normalEdge || 0.25) : +CONFIG.normalEdgeMotor; if (patch && ('grid' in patch || 'gridExtent' in patch)) buildGrid(); applyColors(); onScroll(); frame(); },
       setProgress(p, q) { progressTarget = progress = Math.min(1, Math.max(0, +p || 0)); inspTarget = insp = Math.min(1, Math.max(0, +q || 0)); if (stepped) { tw = null; sq = insp; posTarget = pos = progress; } else posTarget = pos = progress + insp; place(); wake(); },
+      // draw the live scene at this much of the inspection (0-1), at once: for rendering the sequence's frames (the stepped layout, docked)
+      seek(q) { q = Math.min(1, Math.max(0, +q || 0)); if (stepped) { tw = null; fq = sq = q; } else { insp = q; posTarget = pos = 1 + q; } shownPos = -1; place(); seqHide(); render(); },
       get state() { const d = camera.position.clone().sub(camTarget); return { focus: key, azimuth: azimuth(), startAzimuth: azimuth0(), progress, inspect: stepped ? sq : insp, stepped, step, docked, dock: dk, moving: !!tw, looping: !!raf, visible, heading: [Math.atan2(d.x, d.z) / D2R, Math.atan2(d.y, Math.hypot(d.x, d.z)) / D2R, d.length()], motorHeight: motorH, triangles: tris, props: props.length, pixelRatio: renderer.getPixelRatio(), edgePass: [rt.width, rt.height], tiles: T.nx * T.ny }; },
-      destroy() { alive = false; if (raf) cancelAnimationFrame(raf); for (const o of rowIOs) o.disconnect(); if (endIO) endIO.disconnect(); clearInterval(themeWatch); if (themeMO) themeMO.disconnect(); io.disconnect(); removeEventListener('scroll', onScroll); if (ro) ro.disconnect(); else removeEventListener('resize', frame); rt.dispose(); renderer.dispose(); renderer.domElement.remove(); }
+      destroy() { alive = false; if (scIO) scIO.disconnect(); if (seqCv) seqCv.remove(); if (raf) cancelAnimationFrame(raf); for (const o of rowIOs) o.disconnect(); if (endIO) endIO.disconnect(); clearInterval(themeWatch); if (themeMO) themeMO.disconnect(); io.disconnect(); removeEventListener('scroll', onScroll); if (ro) ro.disconnect(); else removeEventListener('resize', frame); rt.dispose(); renderer.dispose(); renderer.domElement.remove(); }
     };
   }
 
@@ -863,5 +917,5 @@
       .then(([, buf]) => new Promise((res, rej) => { const ld = new global.THREE.GLTFLoader(); if (global.MeshoptDecoder) ld.setMeshoptDecoder(global.MeshoptDecoder); ld.parse(buf, url.replace(/[^/]*$/, ''), res, rej); }))
       .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.24.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.25.0' };
 })(typeof window !== 'undefined' ? window : this);
