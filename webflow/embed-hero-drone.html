@@ -102,8 +102,10 @@
      never reframed) and leaves with the track, and .section_product-alt, the Ridge copy that has ridden up over the lower
      part of the drone (it has the page background and a 1px border-01 line along its top), follows right under the band.
      The approach there flies straight from the opening view to the isometric view, from above (azimuth -45, elevation 32),
-     and with no rows (inspect.auto, drone-hero.js 3.26) the rest of the drone then dissolves round the motor over 1.4s
-     (isolate) and the camera turns slowly round the motor (a turn every 40s) while the band is on screen. Scrolled back
+     and lands with the last fifth of that scroll to go (inspect.arriveAt 0.8, drone-hero.js 3.27), so the view has settled
+     before the band locks; with no rows (inspect.auto) the rest of the drone then dissolves round the motor over 1.4s
+     (isolate) while the camera eases into a slow turn round the motor (a turn every 40s, up to speed over 2.5s), on in the
+     direction the approach was turning, for as long as the band is on screen. Scrolled back
      up past the arrival, the drone comes back and the orbit unwinds to the arrival view and the approach plays in reverse. The band draws at a pixel ratio of up to 2. -->
 <div id="hero-drone" style="width:100%;height:100%;--topo-block:var(--_theme---background-01);--topo-label:var(--_theme---text-01);--topo-label-secondary:var(--_theme---map-boundary);--drone-grid:var(--_theme---text-03)"></div>
 <!-- The poster frame: a still of the drone's first frame, the drone alone (posters/ in the repo, one per layout and theme, chosen here
@@ -118,7 +120,7 @@
     img.src = 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@f269731/posters/drone-start-' + (n ? 'narrow' : 'wide') + '-' + t + '.webp';
   })();
 </script>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@f28d6db/drone-hero.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@93388c7/drone-hero.js"></script>
 <script>
   var hwPre = window.hwPreloader;
   // up to 991px (the narrow layout) the drone is set up once, at load: no idle propeller turn (the props only
@@ -162,8 +164,10 @@
       windows: [[0, 1]], isolate: [0, 1],     // over the whole of the move
       rows: '', copies: null, callouts: false, click: false, fillVar: '', activeVar: '', reachEvent: '', unreachEvent: '', easeOut: 0,
       steps: true, auto: true,            // stepped, and the move plays by itself once the drone has arrived…
+      arriveAt: 0.8,                      // … which is with a fifth of the scroll still to go before the band locks: the camera has landed and is orbiting while the copy rises to meet it…
       tween: 1400,                        // … over this many ms…
-      orbitSeconds: 40,                   // … then one slow turn round the motor every 40s
+      orbitSeconds: 40,                   // … and it turns slowly round the motor, a turn every 40s, on in the direction the approach was turning (orbitDirection 'approach'),
+      orbitRamp: 2500,                    // … easing up to that speed over 2.5s, out of the landing
       dock: 0.42,                         // the band the canvas docks to at the arrival, as a share of its height (keep in step with .hero-drone_sticky's height, .section_hero's top margin and .product_track's height there)
       dockPixelRatio: 2                   // the band orbits continuously, so it draws at a pixel ratio of up to 2
     } : {                                 // desktop: the inspection over the product track's scroll (the poses, isolate, crossfade, copies and easeOut are the library's defaults; see the README to change them)
