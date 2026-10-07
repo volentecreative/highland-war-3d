@@ -76,4 +76,30 @@
   document.addEventListener('touchstart', kick, { passive: true });
   document.addEventListener('click', kick);
 })();
+
+/* The scroll prompt (.hero_scroll, under the hero copy's Contact button, styled in the Designer: hidden by default, is-shown fades
+   and lifts it in): for visitors who have not started scrolling, it appears 3.5s after the page is ready (after the
+   load gate lifts) if the page is still at the top, and its chevron bobs gently (a Web Animations loop, transform
+   only); the first scroll fades it away for good. With reduced motion it appears without the bob. */
+(function () {
+  var el = document.querySelector('[data-hero-scroll]');
+  if (!el) return;
+  var icon = el.querySelector('.hero_scroll-icon'), anim = null, gone = false, AT = 3500, TOP = 24;
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function hide() {
+    if (gone || window.scrollY < TOP) return; gone = true;
+    window.removeEventListener('scroll', hide);
+    el.classList.remove('is-shown');
+    if (anim) setTimeout(function () { anim.cancel(); }, 700);
+  }
+  function show() {
+    if (gone || window.scrollY >= TOP) { gone = true; return; }
+    el.classList.add('is-shown');
+    if (!reduced && icon && icon.animate)
+      anim = icon.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(0.3rem)' }], { duration: 900, iterations: Infinity, direction: 'alternate', easing: 'ease-in-out' });
+  }
+  window.addEventListener('scroll', hide, { passive: true });
+  var ready = window.hwPreloader && window.hwPreloader.done ? window.hwPreloader.done : Promise.resolve();
+  ready.then(function () { setTimeout(show, AT); });
+})();
 </script>
