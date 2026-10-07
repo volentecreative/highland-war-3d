@@ -35,9 +35,13 @@
     "microInterval": 10,
     "contourLevels": 2,
     "lazy": 1.5,                 // viewports away from the screen at which the map starts loading (three.js, the terrain, the lines); null = at once
+    "lazyAfter": null,           // a promise: the map also starts loading once it has settled, in the next idle moment (whichever comes first), so a fast scroll never arrives at an unbuilt map
     "approachTail": 0,           // viewports of the approachScroll track's scroll held after the descent has landed (make the track that much taller), so the end is a rest, not the edge
     "themeFade": 200,            // ms over which the map's colours follow a light/dark switch (the site's html/body transition is .2s); 0 = snap
     "fpsCoarse": 30,             // on touch devices (a coarse pointer): at most this many frames a second, so the page's own scrolling keeps its frames
+    "pixelRatioCapCoarse": 1.25, // on touch devices the canvas's pixel ratio is capped at this (2 = as sharp as a desktop retina screen)
+    "globeScaleNarrow": 1,       // on screens up to the stage's breakpoint (991px): the globe at the top of the approach at this share of its size (it is fitted to the height, so on a phone it overflows the sides; 0.85 = 15% smaller)
+    "fineAspectMin": 0,          // the roads and water show once the frame spans under 90 km of ground across; on a narrow, tall frame that comes much sooner than on a desktop one. With this set (e.g. 1.6), the span is read as if the frame were at least this wide for its height, so they come in at the same point of the descent as on a desktop; 0 = the frame's own width
     "coarseInterval": 100,
     "coarseColor": "var(--topo-coarse, var(--topo-muted, #3f4040))",
     "coarseOpacity": 0.7,
@@ -213,7 +217,7 @@
     // makes mobile Safari struggle, not the geometry. A standard depth buffer throughout: the logarithmic one writes
     // gl_FragDepth, which disables early-Z and hidden-surface removal on tile-based (Apple, Mali) GPUs. The near plane
     // tracks the camera distance (setFrustum), so 24 bits are enough from orbit down to the county.
-    const coarse=!!(global.matchMedia && global.matchMedia('(pointer: coarse)').matches), PR_CAP=coarse?1.25:2;
+    const coarse=!!(global.matchMedia && global.matchMedia('(pointer: coarse)').matches), PR_CAP=coarse?(+CONFIG.pixelRatioCapCoarse||1.25):2;
     const renderer=new THREE.WebGLRenderer({antialias:!coarse, alpha:true}); renderer.setPixelRatio(Math.min(devicePixelRatio||1,PR_CAP)); renderer.setClearColor(0x000000,0); host.prepend(renderer.domElement);
     const scene=new THREE.Scene(); const camera=new THREE.PerspectiveCamera(CONFIG.lens,1,10,1e9);
     const group=new THREE.Group(); scene.add(group);
@@ -473,7 +477,8 @@
       const set=(o,base,a)=>{ if(!o) return; o.material.opacity=base*a; o.visible=a>0.01; };
       const kmOut=(hi,lo)=>smooth(lo,hi,vw), kmIn=(hi,lo)=>1-smooth(lo,hi,vw);   // fade as the view narrows (in) or widens (out)
       const globe=kmOut(1.6e6,6e5), grat=kmOut(5e5,2.5e5), naA=kmOut(2.5e5,1.0e5), states=1;   // state lines stay: they are context at every scale
-      const near=kmIn(1.5e5,9e4), fine=kmIn(9e4,5.5e4);
+      const vwFine=Math.max(vw, +CONFIG.fineAspectMin>0 ? 2*dist*Math.tan(camera.fov*D2R/2)*(+CONFIG.fineAspectMin) : 0);   // see fineAspectMin
+      const near=kmIn(1.5e5,9e4), fine=1-smooth(5.5e4,9e4,vwFine);
       const county=kmIn(2.0e6,1.2e6);   // the county line, from about halfway down: a small ring round the dot at first
       set(L.globe,0.9,globe); set(L.grat,0.6,grat); set(L.na,0.85,naA); set(L.states,0.8,states);
       set(L.county,1,county); set(L.roads,0.85,fine); set(L.water,0.95,fine);
@@ -510,7 +515,7 @@
     let AP=null;
     if(CONFIG.approach){
       const lens0=()=>+CONFIG.approachLens||38, globeC=new THREE.Vector3(0,-RE,0);
-      AP={ target:0, t:0, farDist(){ return 1.15*RE/Math.sin(lens0()*D2R/2); }, done(){ return this.t>=0.999; } };
+      AP={ target:0, t:0, farDist(){ const g=isNarrow() && +CONFIG.globeScaleNarrow>0 ? +CONFIG.globeScaleNarrow : 1; return 1.15*RE/Math.sin(lens0()*D2R/2)/g; }, done(){ return this.t>=0.999; } };
       // orbitSpeed(t): the turntable's speed as a fraction, ramping 0 → ½ → 1 over orbitStart / orbitMid / orbitEnd
       // (linear pieces, or smoothed). orbitAt(t) is an optional extra on top: orbitAmount degrees of heading turned
       // with the scroll itself over the same window (0 by default — the turntable's own turn is the orbit)
@@ -631,10 +636,12 @@
     // lazy: nothing (three.js, the terrain grids, the lines) is fetched until the host comes within `lazy` viewports of
     // the screen, so a map far down the page costs the page's load nothing
     const near = () => new Promise(res => { const L = CONFIG.lazy == null ? 1.5 : +CONFIG.lazy; if(!(L >= 0) || !('IntersectionObserver' in global)) return res();
-      const io = new IntersectionObserver(en => { if(en[0].isIntersecting){ io.disconnect(); res(); } }, { rootMargin: Math.round(L * 100) + '% 0px' }); io.observe(host); });
+      const io = new IntersectionObserver(en => { if(en[0].isIntersecting){ io.disconnect(); res(); } }, { rootMargin: Math.round(L * 100) + '% 0px' }); io.observe(host);
+      // lazyAfter: or once this promise has settled (e.g. the hero's own load), in the next idle moment, so the map is ready before the scroll gets there
+      if(CONFIG.lazyAfter){ const idle = () => { io.disconnect(); res(); }; Promise.resolve(CONFIG.lazyAfter).catch(()=>{}).then(() => { if(global.requestIdleCallback) requestIdleCallback(idle, { timeout: 3000 }); else setTimeout(idle, 200); }); } });
     return near().then(() => Promise.all([loadThree(), loadData(CONFIG.data||{})])).then(([_,DATA])=>{ const inst = build(host, CONFIG, DATA); if(!CONFIG.labelClass) host.querySelectorAll('.topo-label').forEach(el=>{ if(!(CONFIG.countyLabelClass&&el.classList.contains('topo-label--county'))) el.style.setProperty('font', CONFIG.labelFont); }); return inst; });
   }
   function autoMount(){ document.querySelectorAll('[data-topo]').forEach(el=>{ if(el.dataset.topoMounted) return; el.dataset.topoMounted='1'; let cfg={}; try{ cfg=JSON.parse(el.dataset.config||'{}'); }catch(e){} mount(el,cfg); }); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', autoMount); else autoMount();
-  global.TopoTurntable = { mount, defaults: DEFAULTS, version: '2.3.0' };
+  global.TopoTurntable = { mount, defaults: DEFAULTS, version: '2.4.0' };
 })(window);

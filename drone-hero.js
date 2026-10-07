@@ -103,6 +103,7 @@
     pixelRatioCapCoarse: 1.5,
     fpsCoarse: 30,
     themeFade: 200,            // ms over which the colours follow a light/dark switch (the site's own html/body transition is .2s); 0 = snap
+    sampleCapCoarse: 4,        // on touch devices the edge pass's resolution is at most this many times the canvas's CSS pixels (pixel ratio x supersample): at a pixel ratio of 3 (the docked band on a phone) it supersamples 1.33x rather than 2x — the same sharpness on screen at under half the fill, so the scroll keeps its frame rate; 0 = no cap
     flagFpsCoarse: 30          // on touch devices the flag's wave (rebuilt on the CPU) steps at most this many times a second; 0 = every frame
   };
   const COLOR_KEYS = ['primary', 'secondary', 'gridColor', 'face', 'background'];
@@ -557,24 +558,33 @@
       const dg = progressTarget >= 0.999 ? true : progressTarget < 0.995 ? false : dk === 1;   // its own, narrow hysteresis: a resize each way, so not on every pixel
       const d = dg && dockF() < 1 ? 1 : 0; if (d !== dk) setDock(d);
     }
-    // follow: 'scroll' — how far past the line each row's top is (the arrival counts as row 0, past when the end element is above the
-    // canvas's top), and so where on the path the camera should be: at pose k exactly as row k's top meets the line, in between pro rata.
-    // The active row is the last one past the line, and its bar fills on the way to the next (the last one's by the time the band leaves)
+    // follow: 'scroll' — the rows play the same windows as the wide layout: how far past the line each row's top is (the arrival
+    // counts as row 0, past when the end element is above the canvas's top). Before row 1 reaches the line the camera runs the intro
+    // (0 to the first window's start); while row k is the last one past the line it runs row k's window, from its start to its end,
+    // arriving at pose k as row k+1 meets the line — so each stage plays while its own row is the active one, as above the
+    // breakpoint. The last row's stage (and its bar) ends by the time its top reaches the band's bottom, while it is still in full
+    // view, or as the band begins to leave if that comes sooner, so the last pose and a full bar are always seen
     function readFollow() {
-      if (!rows) rows = rowEls(); const P = inspect.poses, N = P.length, L = (+inspect.line || 0.68) * (global.innerHeight || 1);
+      if (!rows) rows = rowEls(); const P = inspect.poses, N = P.length, W = inspect.windows, vh = global.innerHeight || 1, L = (+inspect.line || 0.68) * vh;
       const a = [gate ? 1 : -1]; if (gate) { const er = endEl.getBoundingClientRect(), hr = host.getBoundingClientRect(); a[0] = hr.top - er.top; }
       for (let k = 1; k <= N; k++) { const r = rows.find(x => x.n === k); a.push(r ? L - r.el.getBoundingClientRect().top : -1e9); }
       let q = 0, st = 0; const fills = new Array(N).fill(0);
-      if (gate && a[0] >= 0) { let i = 0; while (i < N && a[i + 1] >= 0) i++; st = i;
-        q = i === N ? stateQ(N) : stateQ(i) + (stateQ(i + 1) - stateQ(i)) * Math.min(1, a[i] / Math.max(1, a[i] - a[i + 1]));
-        const rem = trackEl ? Math.max(0, trackEl.getBoundingClientRect().bottom - host.getBoundingClientRect().bottom) : 0;   // the scroll left before the band leaves, for the last bar
-        for (let k = 1; k <= N; k++) { const D = k < N ? a[k] - a[k + 1] : a[k] + rem; fills[k - 1] = a[k] < 0 ? 0 : Math.min(1, a[k] / Math.max(1, D)); } }
-      const moved = q !== fq || st !== step, filled = fills.some((f, i) => Math.abs(f - (fFills[i] || 0)) > 0.004);
+      if (gate && a[0] >= 0) {
+        const hb = host.getBoundingClientRect(), rem = trackEl ? Math.max(0, trackEl.getBoundingClientRect().bottom - hb.bottom) : 0;   // the scroll left before the band leaves
+        const lastD = Math.max(1, Math.min(L - hb.bottom, a[N] + rem));                     // the last row's stage: until its top meets the band's bottom
+        const D = k => k < N ? Math.max(1, a[k] - a[k + 1]) : lastD;                          // row k's stage, in px of scroll
+        let i = 0; while (i < N && a[i + 1] >= 0) i++; st = i;
+        const w0 = k => (W[k - 1] || [stateQ(k - 1), stateQ(k)])[0], w1 = k => stateQ(k);
+        if (i === 0) q = w0(1) * Math.min(1, a[0] / Math.max(1, a[0] - a[1]));            // the intro, from the arrival to row 1 at the line
+        else q = w0(i) + (w1(i) - w0(i)) * Math.min(1, a[i] / D(i));
+        for (let k = 1; k <= N; k++) fills[k - 1] = a[k] < 0 ? 0 : Math.min(1, a[k] / D(k)); }
+      const moved = q !== fq || st !== step, filled = fills.some((f, i) => Math.abs(f - (fFills[i] || 0)) > 0.002);
       fq = q; step = st; fFills = fills;
       if (moved) { shownPos = -1; wake(); }                     // the camera or the active row changed: a new frame
       else if (filled) writeFills();                            // only the bars: they are the page's CSS, so the canvas is not drawn again
     }
-    function writeFills() { if (!rows || !inspect.fillVar) return; const nr = isNarrow(); for (const r of rows) { const v = fFills[r.n - 1] || 0, f = (nr ? Math.round(v * 50) / 50 : v).toFixed(2); if (r.fill !== f) { r.fill = f; r.el.style.setProperty(inspect.fillVar, f); } } }
+    // the bars (narrow: in steps of 0.005, so a bar grows smoothly)
+    function writeFills() { if (!rows || !inspect.fillVar) return; const nr = isNarrow(); for (const r of rows) { const v = fFills[r.n - 1] || 0, f = (nr ? Math.round(v * 200) / 200 : v).toFixed(3); if (r.fill !== f) { r.fill = f; r.el.style.setProperty(inspect.fillVar, f); } } }
     function goStep(k) {
       const from = sq, to = stateQ(k), jump = Math.abs(k - step); step = k;
       if (reduced || !(+inspect.tween > 0)) { sq = to; tw = null; stepU = 1; } else { tw = { from, to, t0: performance.now(), dur: +inspect.tween * (1 + (Math.max(1, jump) - 1) / 3) }; stepU = 0; }
@@ -706,7 +716,7 @@
       // the pixel budget (and the largest texture) asks for, each with a guard band so the lines run across tile edges
       const PR = Math.min(devicePixelRatio || 1, docked && +inspect.dockPixelRatio > 0 ? +inspect.dockPixelRatio : coarse ? (+CONFIG.pixelRatioCapCoarse || 1.5) : (+CONFIG.pixelRatioCap || 2));   // docked: the band is half the pixels, so it can afford the device's own
       let resized = false; if (PR !== sized.PR || w !== sized.w || h !== sized.h) { sized.PR = PR; sized.w = w; sized.h = h; renderer.setPixelRatio(PR); renderer.setSize(w, h, false); resized = true; }   // only on a real change: setSize clears the canvas (a phone's toolbar fires resize on every scroll)
-      const S = Math.max(1, +CONFIG.supersample || 1), W = Math.round(w * PR), H = Math.round(h * PR), maxT = Math.min(8192, renderer.capabilities.maxTextureSize || 8192), budget = +CONFIG.pixelBudget || 8e6;
+      const S = Math.max(1, Math.min(+CONFIG.supersample || 1, coarse && +CONFIG.sampleCapCoarse > 0 ? +CONFIG.sampleCapCoarse / PR : Infinity)), W = Math.round(w * PR), H = Math.round(h * PR), maxT = Math.min(8192, renderer.capabilities.maxTextureSize || 8192), budget = +CONFIG.pixelBudget || 8e6;
       T.nx = Math.max(1, Math.ceil(W * S / maxT)); T.ny = Math.max(1, Math.ceil(H * S / maxT), Math.ceil(W * S * H * S / (budget * T.nx)));
       T.w = Math.ceil(W / T.nx); T.h = Math.ceil(H / T.ny); T.g = 3; T.PR = PR; T.S = S; T.W = W; T.H = H;
       const rw = Math.round((T.w + 2 * T.g) * S), rh = Math.round((T.h + 2 * T.g) * S); rt.setSize(rw, rh); edgeMat.uniforms.uRes.value.set(rw, rh);
@@ -853,5 +863,5 @@
       .then(([, buf]) => new Promise((res, rej) => { const ld = new global.THREE.GLTFLoader(); if (global.MeshoptDecoder) ld.setMeshoptDecoder(global.MeshoptDecoder); ld.parse(buf, url.replace(/[^/]*$/, ''), res, rej); }))
       .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.23.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.24.0' };
 })(typeof window !== 'undefined' ? window : this);
