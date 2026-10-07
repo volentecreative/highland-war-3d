@@ -175,7 +175,7 @@
     orbitReturnSeconds: 1.6,   // … the spring's period on the way back
     orbitHome: null,           // stepped: where (of the scroll to the arrival) the heading is home on the way back up, unwinding from where the scroll turned; null = arriveAt.
                                // Set it a little below arriveAt to spread the unwind over more scroll while the camera is still all but on the track
-    dissolveFade: '[data-drone-dissolve]',   // elements in the track whose opacity follows the dissolve (0 with the whole drone, 1 once only the motor is left), so labels can come in as the drone goes; '' = none
+    dissolveFade: '[data-drone-dissolve]',   // elements on the page whose opacity follows the dissolve (0 with the whole drone, 1 once only the motor is left), so labels can come in as the drone goes; '' = none
     dissolveScroll: null,      // stepped auto only: [a, b] of the scroll to the arrival (as orbitScroll) over which the move to the poses (the drone dissolving) plays,
                                // on the scroll and damped as the approach, both ways, instead of in time (tween) once arrived; null = in time
     arriveAt: 1,               // stepped: the camera's approach completes at this share of the scroll to the arrival (e.g. 0.8: it lands with the last 20% to go, and the landing,
@@ -742,7 +742,7 @@
       if (inspect) { const win = (w, v) => Array.isArray(w) && w.length === 2 && w[1] > w[0] ? Math.min(1, Math.max(0, (v - w[0]) / (w[1] - w[0]))) : 0;
         const W0 = inspect.windows[0] || [0, 1], WL = inspect.windows[inspect.windows.length - 1] || [0, 1], isoW = inspect.isolate == null ? W0 : inspect.isolate, fadeW = inspect.copies && inspect.copies.fade == null ? [WL[0], WL[0] + 0.4 * (WL[1] - WL[0])] : inspect.copies && inspect.copies.fade;
         const ti = useInsp ? win(isoW, q) : 0, droneA = (1 - ti) * (1 - ti), copyA = useInsp && inspect.copies ? win(fadeW, q) : 0;   // the drone goes quickly at first and lingers faintly, so its leaving never snaps
-        if (fadeEls === null) fadeEls = inspect.dissolveFade && trackEl ? [...trackEl.querySelectorAll(inspect.dissolveFade)] : [];   // the labels that come in as the drone goes
+        if (fadeEls === null) fadeEls = inspect.dissolveFade ? [...document.querySelectorAll(inspect.dissolveFade)] : [];   // anywhere on the page (e.g. a caption riding on the copy below the band)   // the labels that come in as the drone goes
         if (fadeEls.length) { const fo = (Math.round(ti * 100) / 100).toFixed(2); if (fo !== shownFade) { shownFade = fo; for (const el of fadeEls) el.style.opacity = fo; } }
         if (droneA !== shownDroneA) { shownDroneA = droneA; const la = inspect.crossfade === false ? droneA : 1; edgeMat.uniforms.uDroneA.value = la; droneRibMat.uniforms.uOpacity.value = (+CONFIG.ribOpacity) * la;
           const on = droneA > 0.001; if (on !== droneOn) { droneOn = on; for (const m of solids) if (m.userData.kind === 'rest' || m.userData.kind === 'motor') m.visible = on; if (droneRibs) droneRibs.visible = on; if (grid) grid.visible = true; } }
@@ -975,5 +975,5 @@
       .then(([, buf]) => new Promise((res, rej) => { const ld = new global.THREE.GLTFLoader(); if (global.MeshoptDecoder) ld.setMeshoptDecoder(global.MeshoptDecoder); ld.parse(buf, url.replace(/[^/]*$/, ''), res, rej); }))
       .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.33.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.33.1' };
 })(typeof window !== 'undefined' ? window : this);
