@@ -27,6 +27,7 @@
     "tilt": 31,
     "lens": 8,
     "fitMargin": 1.1,
+    "fitMarginNarrow": null,     // on screens up to the stage's breakpoint (991px): the landing's fit margin instead of fitMargin (under 1 = the county framed larger than the frame allows over a whole turn, so it may run off the sides at some headings); null = fitMargin
     "background": "var(--topo-bg, var(--map-bg, #222322))",
     "lineColor": "var(--topo-line, var(--topo, #525352))",
     "lineOpacity": 1,
@@ -461,7 +462,7 @@
       for(const l of labels) l.em=l.el.offsetHeight||14;   // measured here, not every frame
       camera.aspect=w/h;
       dist=R*3; pol=polFinal(); pivot.copy(pivotHome); camera.fov=CONFIG.lens; camera.updateProjectionMatrix();
-      const margin=1/(CONFIG.fitMargin||1.1);
+      const margin=1/((isNarrow() && +CONFIG.fitMarginNarrow>0 ? +CONFIG.fitMarginNarrow : +CONFIG.fitMargin)||1.1);
       const measure=()=>{ let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9; for(let k=0;k<24;k++){ placeCam(k/24*Math.PI*2); for(const p of fitPts){ const q=p.clone().project(camera); if(q.x<minX)minX=q.x; if(q.x>maxX)maxX=q.x; if(q.y<minY)minY=q.y; if(q.y>maxY)maxY=q.y; } } return {minX,maxX,minY,maxY}; };
       // the county must fit the room the resting focal point leaves on its tighter side
       const fr=focusAt(1), roomX=2*Math.min(fr.x,1-fr.x), roomY=2*Math.min(fr.y,1-fr.y);
@@ -627,7 +628,7 @@
     return { destroy(){ alive=false; io.disconnect(); if(ro) ro.disconnect(); removeEventListener('resize',requestFit); clearInterval(themeWatch); renderer.dispose(); renderer.domElement.remove(); for(const l of labels) l.el.remove(); },
       setAzimuth(a){ spin=a-azHome(); }, get azimuth(){ return az; },
       // change settings in place; geometry options (intervals, roads, water, county) still need a fresh mount
-      set(patch){ renderBump++; Object.assign(CONFIG, patch||{}); for(const k of COLOR_KEYS) if(patch&&k in patch){ RAWCOLORS[k]=patch[k]; lastColors=''; } if(patch && ('tilt' in patch || 'lens' in patch || 'fitMargin' in patch || 'labelHeight' in patch || 'groundLabelScale' in patch || 'groundLabels' in patch)) requestFit(); },
+      set(patch){ renderBump++; Object.assign(CONFIG, patch||{}); for(const k of COLOR_KEYS) if(patch&&k in patch){ RAWCOLORS[k]=patch[k]; lastColors=''; } if(patch && ('tilt' in patch || 'lens' in patch || 'fitMargin' in patch || 'fitMarginNarrow' in patch || 'labelHeight' in patch || 'groundLabelScale' in patch || 'groundLabels' in patch)) requestFit(); },
       setProgress(t){ if(AP) AP.target=Math.min(1,Math.max(0,+t||0)); }, get progress(){ return AP?AP.t:1; },
       get state(){ return { progress: AP?AP.t:1, distance: dist, viewWidth: 2*dist*Math.tan(camera.fov*Math.PI/360)*camera.aspect, tilt: 90-pol*180/Math.PI, heading: -az*180/Math.PI, fov: camera.fov }; } };
   }
@@ -647,5 +648,5 @@
   }
   function autoMount(){ document.querySelectorAll('[data-topo]').forEach(el=>{ if(el.dataset.topoMounted) return; el.dataset.topoMounted='1'; let cfg={}; try{ cfg=JSON.parse(el.dataset.config||'{}'); }catch(e){} mount(el,cfg); }); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', autoMount); else autoMount();
-  global.TopoTurntable = { mount, defaults: DEFAULTS, version: '2.4.1' };
+  global.TopoTurntable = { mount, defaults: DEFAULTS, version: '2.5.0' };
 })(window);
