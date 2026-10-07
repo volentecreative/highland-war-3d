@@ -18,7 +18,7 @@
      lands (fractions of width and height), so it is responsive by construction. The move there is spread
      over 10-75% of the descent, so it reads as the camera aiming where it is going rather than a late slide.
      Up to 991px the globe opens 15% smaller than its height-fitted size (globeScaleNarrow), so less of it runs
-     off the sides, and the roads and water come in at the same point of the descent as on desktop
+     off the sides, the county lands framed larger than on desktop (fitMarginNarrow), and the roads and water come in at the same point of the descent as on desktop
      (fineAspectMin: the ground the frame spans is read as if it were desktop-shaped).
      The canvas renders at the screen's own pixel ratio up to 2x on desktop and on touch devices alike
      (pixelRatioCapCoarse), so the contour lines are as crisp on a phone, with no frame cap there (fpsCoarse 60);
@@ -36,7 +36,7 @@
   --topo-label-secondary: var(--_theme---text-03);
   --topo-bg:              transparent;"></div>
 
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@4465688/topo-turntable.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@159e553/topo-turntable.js"></script>
 <script>
   TopoTurntable.mount('#topo-descent', {
     approach:       true,                       // open on the globe and descend as the section scrolls
@@ -54,6 +54,7 @@
     focusNarrow: { x: 0.5,  y: 0.42 },          // up to 991px: the middle of the section, a touch high so it clears the copy over the bottom
     focusStart: 0.1, focusEnd: 0.75,            // the move to that point runs over this window of the descent
     globeScaleNarrow: 0.85,                     // up to 991px: the opening globe 15% smaller (topo-turntable 2.4)
+    fitMarginNarrow: 0.85,                      // up to 991px: the county framed larger at the landing, about 85% of the width, still clear of the edges as it turns (topo-turntable 2.5)
     fineAspectMin: 1.6,                         // the roads and water appear at the same point of the descent as on a 16:10 desktop screen
     pixelRatioCapCoarse: 2, fpsCoarse: 60,      // touch devices: drawn at up to 2x, every frame
     stage: {
