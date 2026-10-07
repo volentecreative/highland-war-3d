@@ -1,0 +1,55 @@
+<!-- Gainesboro descent: the scroll-driven topo map (topo-turntable.js, pinned to a commit).
+     Custom code because it is a WebGL scene; it is the only script in this section.
+     Nothing of it loads until the section is within 1.5 viewports of the screen (lazy): the terrain grids and
+     the lines are about a megabyte, and they are far down the page.
+     The sticky track is .section_topo-descent - the descent follows that section's scroll, and lands a
+     quarter of a viewport before the section's end (approachTail; the section is 425svh tall), so the
+     landing is a rest rather than the edge.
+     Colours come from the Theme variables map-line / map-muted / map-boundary / map-water and the
+     text-01 / text-03 / background-01 theme colours, so the map follows the light/dark toggle.
+     The county outline follows the county label's colour (countyColor 'label', the library default).
+     The state names (Kentucky / Tennessee) are labels like the towns' (same class and size), turned with
+     the map so they follow the state line, from about 500 km down.
+     Sizing lives on the Designer classes (topo-descent_*), not here. The map fills the section as a
+     background on every breakpoint (up to 991px too: the globe is fitted to the height, so on a phone it
+     overflows the sides, and the copy sits over the bottom of it); `focus` is where on the canvas the county
+     lands (fractions of width and height), so it is responsive by construction. The move there is spread
+     over 10-75% of the descent, so it reads as the camera aiming where it is going rather than a late slide.
+     On desktop the canvas renders at the screen's own pixel ratio (up to 2x), so the contour lines are drawn
+     at full resolution. On touch devices it renders at 1.25x and at most 30 frames a second (fpsCoarse), the
+     labels are placed with transforms and the canvas is only resized on a real size change, so nothing in
+     the layout is touched while the page scrolls. -->
+<div id="topo-descent" style="width:100%;height:100%;
+  --topo-line:            var(--_theme---map-line);
+  --topo-coarse:          var(--_theme---map-muted);
+  --topo-muted:           var(--_theme---map-muted);
+  --topo-boundary:        var(--_theme---map-boundary);
+  --topo-road:            var(--_theme---map-boundary);
+  --topo-water:           var(--_theme---map-water);
+  --topo-block:           var(--_theme---background-01);
+  --topo-label:           var(--_theme---text-01);
+  --topo-label-secondary: var(--_theme---text-03);
+  --topo-bg:              transparent;"></div>
+
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@de72dd0/topo-turntable.js"></script>
+<script>
+  TopoTurntable.mount('#topo-descent', {
+    approach:       true,                       // open on the globe and descend as the section scrolls
+    approachScroll: '.section_topo-descent',    // the tall sticky track the stage is stuck inside
+    approachTail:   0.25,                       // the descent lands this many viewports before the track's end, and rests there
+    lazy:           1.5,                        // load once the section is within this many viewports of the screen
+    roads:          true,
+    water:          true,
+    rotateSeconds:  120,                        // the turntable: begins turning at 90% of the scroll, full speed by 100%
+    labelClass:       'text-style-mono text-size-small text-color-03',   // Gainesboro, Whitleyville, Mayfield (text only); Kentucky / Tennessee use it too
+    cityLabelClass:   'text-style-mono text-size-small text-color-03',   // Nashville, Knoxville, Louisville (text only, a step before the county's name)
+    countyLabelClass: 'text-style-eyebrow',                              // Jackson County (dot, leader and outline in the same colour)
+    focus:       { x: 0.75, y: 0.5 },           // desktop: the county lands in the centre of the right half
+    focusNarrow: { x: 0.5,  y: 0.42 },          // up to 991px: the middle of the section, a touch high so it clears the copy over the bottom
+    focusStart: 0.1, focusEnd: 0.75,            // the move to that point runs over this window of the descent
+    stage: {
+      reveal: '.topo-descent_text-wrapper',     // the copy fades in over the same window the focus moves in
+      start:  0.45, end: 0.7
+    }
+  });
+</script>

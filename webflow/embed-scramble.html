@@ -1,8 +1,16 @@
 <script>
 /* ============================================================
-   scramble.js — v2.5.1
+   scramble.js — v2.6.0
    Text scramble / cycle-in, triggered on scroll-into-view (or on
    a DOM event). No dependencies. No Webflow Interactions.
+
+   v2.6.0: runs cascade. Inside a wrapper the text leaves start one after
+   another (data-scramble-stagger, ms, default 120), and blocks that come
+   into view in the same moment start in page order, 180ms apart, so the
+   copy deciphers in reading order. With -cipher the dim stays on the
+   glyphs: every character keeps the wrapper's is-scrambled opacity (read
+   from the Designer's combo class) until it resolves, then lights up, so
+   the decode visibly travels left to right.
 
    v2.5.1: a frame writes only the cells whose glyph changed (settled
    cells are left alone), so a long run touches far less of the DOM.
@@ -33,6 +41,8 @@
 
      data-scramble-chars="AB01#"   charset, default below
      data-scramble-delay="200"     ms before it starts
+     data-scramble-stagger="120"   on a wrapper: ms between its text
+                                   leaves starting (0 = all at once)
      data-scramble-lock            pin glyph widths (no wobble in
                                    proportional fonts)
      data-scramble-reveal          hold each char blank before it
@@ -67,6 +77,8 @@
   var CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!<>-_\\/[]{}=+*^?#';
   var DEFAULTS = { duration: 900, sweep: 0.65, churn: 0.28 };
   var STATE = 'is-scrambled';
+  var STAGGER = 120;   // ms between the text leaves of one wrapper starting
+  var CASCADE = 180;   // ms between blocks that come into view together
   var REDUCED = window.matchMedia &&
                 window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -111,6 +123,8 @@
     this.lock   = this.cipher || src.hasAttribute('data-scramble-lock');
     this.reveal = src.hasAttribute('data-scramble-reveal');
     this.raf    = null;
+    this.timer  = null;
+    this.dim    = null;   // with -cipher: the opacity an unresolved character keeps (the wrapper's dim)
     this.cells  = null;
     this._tick  = this.tick.bind(this);
   }
@@ -221,9 +235,12 @@
     this.t0 = null;   // the run's clock starts at its first frame
   };
 
-  Scramble.prototype.start = function () {
-    if (this.raf && !this.out) return;
+  /* extra: ms on top of data-scramble-delay, for the cascade. While it waits
+     the leaf shows glyphs (never the real text, then a scramble), dimmed. */
+  Scramble.prototype.start = function (extra) {
+    if ((this.raf || this.timer) && !this.out) return;
     if (this.raf) { cancelAnimationFrame(this.raf); this.raf = null; }
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     if (REDUCED || !this.target) { this.el.textContent = this.target; return; }
 
     if (this.lock) { if (!this.cells) this.cells = this.buildCells(); }
@@ -231,9 +248,10 @@
 
     this.plan();
     this.out = false;
-    var self = this;
-    if (this.delay) {
-      setTimeout(function () { self.raf = requestAnimationFrame(self._tick); }, this.delay);
+    var self = this, wait = this.delay + (extra || 0);
+    if (wait > 0) {
+      this.paint(this.queue.map(function (q) { return q.space ? q.ch : (q.sub = self.glyph()); }), null);
+      this.timer = setTimeout(function () { self.timer = null; self.raf = requestAnimationFrame(self._tick); }, wait);
     } else {
       this.raf = requestAnimationFrame(this._tick);
     }
@@ -244,22 +262,29 @@
   Scramble.prototype.hide = function () {
     if (REDUCED || !this.target) return;
     if (this.raf) { cancelAnimationFrame(this.raf); this.raf = null; }
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     if (!this.cells) this.cells = this.buildCells();
+    else this.cells.forEach(function (c) { c.__o = ''; c.style.opacity = ''; });   // the wrapper's class takes the dim back
     this.plan();
     this.out = true;
     this.raf = requestAnimationFrame(this._tick);
   };
 
-  Scramble.prototype.paint = function (out) {
+  /* lit[i]: character i has resolved (null = none has). With a dim set,
+     an unresolved cell keeps it and a resolved one goes to full. */
+  Scramble.prototype.paint = function (out, lit) {
     if (!this.cells) { this.el.textContent = out.join(''); return; }
+    var dim = this.out ? null : this.dim;
     for (var i = 0; i < out.length; i++) {
-      var ci = this.cellIndex[i];
-      if (ci >= 0 && this.cells[ci] && this.cells[ci].textContent !== out[i]) this.cells[ci].textContent = out[i];   // only the cells whose glyph changed
+      var ci = this.cellIndex[i], c = ci >= 0 && this.cells[ci];
+      if (!c) continue;
+      if (c.textContent !== out[i]) c.textContent = out[i];   // only the cells whose glyph changed
+      if (dim != null) { var o = lit && lit[i] ? '' : String(dim); if (c.__o !== o) { c.__o = o; c.style.opacity = o; } }
     }
   };
 
   Scramble.prototype.tick = function (now) {
-    var out = [], settled = 0, q;
+    var out = [], lit = [], settled = 0, q;
     /* the frame by the clock (a frame is 16.7ms), so a slow or busy page skips ahead rather than dragging the run out */
     if (this.t0 == null) this.t0 = now;
     this.frame = Math.floor((now - this.t0) / 16.7);
@@ -267,26 +292,27 @@
     for (var i = 0; i < this.queue.length; i++) {
       q = this.queue[i];
 
-      if (q.space) { out.push(q.ch); settled++; continue; }
+      if (q.space) { out.push(q.ch); lit.push(true); settled++; continue; }
 
       if (this.out) {   /* the reverse: real until its frame, then a glyph */
         if (this.frame < q.end) out.push(q.ch);
         else { if (q.sub === null) q.sub = this.glyph(); out.push(q.sub); settled++; }
+        lit.push(false);
         continue;
       }
 
       if (this.frame >= q.end) {
-        out.push(q.ch);
+        out.push(q.ch); lit.push(true);
         settled++;
       } else if (this.reveal && this.frame < q.end * 0.25) {
-        out.push(this.lock ? '' : ' ');
+        out.push(this.lock ? '' : ' '); lit.push(false);
       } else {
         if (q.sub === null || Math.random() < this.opts.churn) q.sub = this.glyph();
-        out.push(q.sub);
+        out.push(q.sub); lit.push(false);
       }
     }
 
-    this.paint(out);
+    this.paint(out, lit);
 
     if (settled === this.queue.length) { if (this.out) { this.raf = null; return; } return this.finish(); }
     this.raf = requestAnimationFrame(this._tick);
@@ -315,11 +341,21 @@
     this.items = leaves.map(function (n) { return new Scramble(n, src); });
     this.cipher = src.hasAttribute('data-scramble-cipher');
     this.repeat = src.hasAttribute('data-scramble-repeat');
+    var st = parseFloat(src.getAttribute('data-scramble-stagger'));
+    this.stagger = isNaN(st) ? STAGGER : Math.max(0, st);
   }
 
-  Group.prototype.start = function () {
+  /* offset: ms before the group's first leaf starts (the cascade across groups) */
+  Group.prototype.start = function (offset) {
+    var self = this;
+    /* the dim the Designer gives the cipher state, read off the wrapper before the class comes off; the characters carry it from here */
+    if (this.cipher && this.dim == null && this.src.classList.contains(STATE)) {
+      var o = parseFloat(getComputedStyle(this.src).opacity);
+      this.dim = o < 1 ? o : null;
+    }
+    this.items.forEach(function (s) { s.dim = self.dim; });
     this.src.classList.remove(STATE);
-    this.items.forEach(function (s) { s.start(); });
+    this.items.forEach(function (s, i) { s.start((offset || 0) + i * self.stagger); });
   };
 
   Group.prototype.showCipher = function () {
@@ -343,12 +379,13 @@
 
     var observer = 'IntersectionObserver' in window
       ? new IntersectionObserver(function (entries) {
-          entries.forEach(function (entry) {
-            if (!entry.isIntersecting) return;
+          /* the blocks arriving together start in page order, CASCADE ms apart */
+          var hits = entries.filter(function (e) { return e.isIntersecting && e.target.__scramble; })
+            .sort(function (a, b) { return a.target.compareDocumentPosition(b.target) & 4 ? -1 : 1; });
+          hits.forEach(function (entry, i) {
             var inst = entry.target.__scramble;
-            if (!inst) return;
             inst.started = true;   // so the cipher waiting on the fonts cannot cancel this run
-            inst.start();
+            inst.start(i * CASCADE);
             if (!inst.repeat) observer.unobserve(entry.target);
           });
         }, { threshold: 0.35, rootMargin: '0px 0px -10% 0px' })

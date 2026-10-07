@@ -1,0 +1,47 @@
+<!-- Ethos cards: the corner dots follow the card's border to border-02, on hover and while the card is active
+     (below). Custom code because the Designer cannot style a child from its parent's hover or state class; the dots'
+     own transition is on their classes (corner-dot-tl / -tr / -bl / -br). -->
+<style>
+  .ethos-card:hover > [class*="corner-dot-"],
+  .ethos-card.is-active > [class*="corner-dot-"] { background-color: var(--_theme---border-02); }
+</style>
+<script>
+/* Ethos cards, up to 991px: a card crossing the middle of the screen gets is-active (a quick scale-up and the
+   border-02 border, styled as .ethos-card.is-active in the Designer at the tablet breakpoint and down) and loses
+   it as it moves on. Above 991px the class is never set. */
+(function () {
+  if (!('IntersectionObserver' in window)) return;
+  var cards = document.querySelectorAll('.ethos-card');
+  if (!cards.length) return;
+  var narrow = window.matchMedia('(max-width: 991px)');
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) { e.target.classList.toggle('is-active', narrow.matches && e.isIntersecting); });
+  }, { rootMargin: '-42% 0px -42% 0px' });   // the middle 16% of the viewport
+  [].forEach.call(cards, function (c) { io.observe(c); });
+})();
+
+/* Background videos (the purpose section's archive footage): play whenever they are near the screen and pause
+   when they are not. Webflow's autoplay alone can be refused on phones (iOS Low Power Mode, data saver, or a play
+   attempted before the video was ready), which leaves the first frame frozen: this re-asserts muted + playsinline,
+   retries on the way into view, and once more on the visitor's first touch, which every browser accepts. */
+(function () {
+  var vids = [].slice.call(document.querySelectorAll('.w-background-video video'));
+  if (!vids.length) return;
+  var near = [];
+  function play(v) {
+    v.muted = true; v.setAttribute('muted', ''); v.playsInline = true; v.setAttribute('playsinline', '');
+    var p = v.play(); if (p && p.catch) p.catch(function () {});
+  }
+  var io = 'IntersectionObserver' in window ? new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      var v = e.target, i = near.indexOf(v);
+      if (e.isIntersecting) { if (i < 0) near.push(v); play(v); }
+      else { if (i > -1) near.splice(i, 1); if (!v.paused) v.pause(); }
+    });
+  }, { rootMargin: '200px 0px' }) : null;
+  vids.forEach(function (v) { if (io) io.observe(v); else play(v); });
+  function kick() { near.forEach(function (v) { if (v.paused) play(v); }); }
+  document.addEventListener('touchstart', kick, { passive: true });
+  document.addEventListener('click', kick);
+})();
+</script>

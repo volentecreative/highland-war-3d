@@ -74,17 +74,17 @@
      scroll after the arrival. The same classes, bars and drone:reach events as above either way. The
      propellers' idle turn stops with the approach. The canvas draws a frame only when something visible
      changes (the scroll, a turning propeller, the flag); once the drone has gone, nothing. On touch devices
-     it renders at a pixel ratio of up to 2 (the docked band at the device's own), with no frame cap, and
+     it renders at a pixel ratio of up to 1.5 (the docked band at up to 2), with no frame cap, and
      nothing in the page's layout is touched while it scrolls (the fill is a transform, and written in
      steps of 0.02 there). The propellers (the model's own tri-blades, their blades lined up so they read as
-     a set) idle very slowly and speed up a little with the scroll. Lines come from a supersampled
+     a set) idle very slowly on desktop and speed up a little with the scroll; up to 991px they only turn with the scroll. Lines come from a supersampled
      screen-space edge pass; the rims, flag markings and floor grid are antialiased screen-space quads, so
      the canvas itself is not multisampled. Colours are the Theme tokens the topo map uses: motors in
      text-01 at the end, the rest in map-boundary, the grid in text-03.
      The load feeds the page's preloader (head code): onProgress reports the model's bytes, three.js, the
      loader and the build, and the mount's promise is tracked, so the preloader lifts once the drone is drawn. -->
 <div id="hero-drone" style="width:100%;height:100%;--topo-block:var(--_theme---background-01);--topo-label:var(--_theme---text-01);--topo-label-secondary:var(--_theme---map-boundary);--drone-grid:var(--_theme---text-03)"></div>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@86fe904/drone-hero.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@de72dd0/drone-hero.js"></script>
 <script>
   var hwPre = window.hwPreloader;
   // up to 991px (the narrow layout) and on touch devices the drone is set up once, at load: no idle propeller
@@ -121,7 +121,7 @@
     grid: 1, gridExtent: 24,              // the floor grid's cell (motor heights) and how far it reaches from the drone's centre
     pixelRatioCapCoarse: 1.5, fpsCoarse: 0,   // touch devices: the canvas's pixel ratio, and no frame cap (it only draws while something moves, so the scroll scrubs at the screen's rate)
     supersample: hwCoarse ? 1.25 : 2,     // the edge pass's supersampling: 2x on desktop; 1.25x on touch devices, about a third of the fill of 2x and still antialiased
-    flagFpsCoarse: 30,                    // touch devices: the flag's wave steps at 30 a second (drone-hero.js 3.21)
+    flagFpsCoarse: 30,                    // touch devices: the flag's wave steps at 30 a second (drone-hero.js 3.21+)
     inspect: {                            // the inspection over the product track's scroll (the poses, isolate, crossfade, copies and easeOut are the library's defaults; see the README to change them)
       windows: [[0.25, 0.5], [0.5, 0.75], [0.75, 1]],   // of that scroll (500svh): the first quarter the intro, then a quarter each for 01, 02 and 03 — each stage's move fills its quarter, and each row gets drone:reach as its window begins. Up to 991px the states are the ends of these windows
       follow: 'scroll',                   // up to 991px: the camera scrubs with the scroll, reaching each pose as its row meets the line. To go back to the stepped version (a one-second move per row, still between), delete this line (or set 'tween')
