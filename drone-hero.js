@@ -168,7 +168,11 @@
     auto: false,               // stepped, 'tween' only: true = no rows — once the drone has arrived (and docked) the camera moves on through every pose by itself over `tween` ms, and back again when the scroll takes it back up
     orbitSeconds: 0,           // stepped: once at the last pose, the camera turns round the motor once every this many seconds while the canvas is on screen; on the way back it unwinds with the move; 0 = no orbit
     orbitDirection: 'approach',   // which way it turns: 'approach' = on in the direction the approach was turning (so it never doubles back), 1 / -1 = toward higher / lower azimuth
-    orbitRamp: 2500,           // ms over which the orbit eases up to speed from rest (smoothstep), so it starts out of the landing rather than at once
+    orbitScroll: null,         // stepped: as the topo map's turntable, the orbit's speed follows the scroll toward the arrival (0-1, before arriveAt's remap): nothing
+                               // before [0], easing up (smoothstep) to full speed at [1], so it is already turning as the camera lands and the approach runs
+                               // straight on into it, never stopping; back up past [0] the heading springs home (critically damped, the short way round);
+                               // null = [arriveAt - 0.2, arriveAt]
+    orbitReturnSeconds: 1.6,   // … the spring's period on the way back
     arriveAt: 1,               // stepped: the camera's approach completes at this share of the scroll to the arrival (e.g. 0.8: it lands with the last 20% to go, and the landing,
                                // the move to the poses and the orbit start there); the dock still waits for the arrival itself
     tween: 1000,               // ms for the move to a state, on a gentle ease-in-out (a jump of several states takes a third longer per extra state); prefers-reduced-motion: instant
@@ -558,8 +562,12 @@
     let orb = 0, stepped = false, step = 0, rowStep = 0, gate = false, sq = 0, stepU = 1, tw = null, liveApproach = true, rowIOs = [], endIO = null;
     let fq = 0, fFills = [];   // follow: 'scroll' — the camera's target on the path, and the rows' bars, read from the rows' places
     const follow = () => inspect && inspect.follow === 'scroll';
-    const orbiting = () => stepped && !(tw && tw.orb0 != null) && !reduced && visible && +inspect.orbitSeconds > 0 && step === inspect.poses.length && step > 0;   // at the last pose (a move there may still be running), not while unwinding
-    let orbT = 0;   // seconds the orbit has been running, for its ease up to speed
+    // the orbit's speed (0-1) at this much of the scroll to the arrival: as the topo map's turntable, it eases up over the last stretch of the approach
+    const orbitF = p => { if (!stepped || !inspect || !(+inspect.orbitSeconds > 0) || reduced) return 0; const A = +inspect.arriveAt > 0 && +inspect.arriveAt < 1 ? +inspect.arriveAt : 1, w = Array.isArray(inspect.orbitScroll) ? inspect.orbitScroll : [Math.max(0, A - 0.2), A];
+      if (p <= w[0]) return 0; if (p >= w[1]) return 1; const u = (p - w[0]) / Math.max(1e-6, w[1] - w[0]); return u * u * (3 - 2 * u); };
+    let orbVel = 0, orbWas = false;   // the spring back home: its velocity (degrees/s), and whether the orbit was running last frame
+    const orbiting = () => visible && orbitF(progressTarget) > 0;
+    const orbReturning = () => stepped && (orb !== 0 || orbVel !== 0) && orbitF(progressTarget) === 0;
     const orbitDir = () => { const d = inspect.orbitDirection; if (d === 1 || d === -1) return d; return azimuth() - azimuth0() < 0 ? -1 : 1; };
     const arrive = p => { const A = inspect && +inspect.arriveAt; return stepped && A > 0 && A < 1 ? Math.min(1, p / A) : p; };   // the camera's share of the approach
     let dk = 0, docked = false, dockBg = '';   // the dock: 0 = the full canvas, 1 = the band; docked = the canvas has been resized to the band
@@ -612,8 +620,7 @@
     function writeFills() { if (!rows || !inspect.fillVar) return; const nr = isNarrow(); for (const r of rows) { const v = fFills[r.n - 1] || 0, f = (nr ? Math.round(v * 200) / 200 : v).toFixed(3); if (r.fill !== f) { r.fill = f; r.el.style.setProperty(inspect.fillVar, f); } } }
     function goStep(k) {
       const from = sq, to = stateQ(k), jump = Math.abs(k - step); step = k;
-      orb = ((orb % 360) + 540) % 360 - 180; if (k < inspect.poses.length) orbT = 0;   // the orbit so far, the short way round, so going back it unwinds by at most half a turn
-      if (reduced || !(+inspect.tween > 0)) { sq = to; tw = null; stepU = 1; if (k < inspect.poses.length) orb = 0; } else { tw = { from, to, t0: performance.now(), dur: +inspect.tween * (1 + (Math.max(1, jump) - 1) / 3), orb0: k < inspect.poses.length ? orb : null }; stepU = 0; }
+      if (reduced || !(+inspect.tween > 0)) { sq = to; tw = null; stepU = 1; } else { tw = { from, to, t0: performance.now(), dur: +inspect.tween * (1 + (Math.max(1, jump) - 1) / 3) }; stepU = 0; }
       if (rows) for (const r of rows) r.from = r.fill == null ? 0 : +r.fill;   // each row's bar runs from where it is
       shownPos = -1; wake();
     }
@@ -643,7 +650,7 @@
       shownPos = -1;
     }
     function leaveSteps() {
-      orb = 0; orbT = 0;
+      orb = 0; orbVel = 0; orbWas = false;
       for (const o of rowIOs) o.disconnect(); rowIOs = []; if (endIO) endIO.disconnect(); endIO = null; liveApproach = true;
       pos = Math.min(1, pos) + sq; stepped = false; tw = null; dk = 0; sq = 0; stepU = 1;
       if (docked) { docked = false; host.style.height = hostHeight0; host.style.background = CONFIG.background; dockMark(false); }
@@ -844,8 +851,15 @@
       const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
       // a state's move: time-based, on one ease; the scroll has no hand in it
       if (stepped && follow() && sq !== fq) { sq = reduced ? fq : sq + (fq - sq) * Math.min(1, (+CONFIG.damping || 0.12) * dt * 60); if (Math.abs(fq - sq) < 1e-5) sq = fq; shownPos = -1; }   // following: damped as the approach is
-      if (tw) { const u = Math.min(1, (now - tw.t0) / tw.dur); stepU = u; sq = tw.from + (tw.to - tw.from) * easeIO(u); if (tw.orb0 != null) orb = tw.orb0 * (1 - easeIO(u)); if (u >= 1) { sq = tw.to; tw = null; } shownPos = -1; }
-      if (orbiting()) { orbT += dt; const r = Math.min(1, orbT * 1000 / Math.max(1, +inspect.orbitRamp || 0)), e = r * r * (3 - 2 * r); orb += orbitDir() * e * dt * 360 / +inspect.orbitSeconds; shownPos = -1; }   // at the last pose: the slow turn round the motor, eased up to speed
+      if (tw) { const u = Math.min(1, (now - tw.t0) / tw.dur); stepU = u; sq = tw.from + (tw.to - tw.from) * easeIO(u); if (u >= 1) { sq = tw.to; tw = null; } shownPos = -1; }
+      if (stepped && inspect) {   // the orbit: its speed follows the scroll in (orbitF), the turn itself runs in time; back out, it springs home
+        const f = orbitF(progressTarget);
+        if (f > 0) { if (visible) { orb += orbitDir() * f * dt * 360 / +inspect.orbitSeconds; shownPos = -1; } orbVel = 0; orbWas = true; }
+        else if (orb !== 0 || orbVel !== 0) {
+          if (orbWas) { orb = ((orb % 360) + 540) % 360 - 180; orbVel = 0; orbWas = false; }   // the short way round
+          const w = 2 * Math.PI / Math.max(0.3, +inspect.orbitReturnSeconds || 1.6), n = Math.min(12, Math.ceil(dt / 0.02)), h = dt / Math.max(1, n);
+          for (let k = 0; k < n; k++) { orbVel += (-w * w * orb - 2 * w * orbVel) * h; orb += orbVel * h; }
+          if (Math.abs(orb) < 1e-3 && Math.abs(orbVel) < 1e-3) { orb = 0; orbVel = 0; } shownPos = -1; } }
       if (SC && scT0 != null) {   // the showcase: the move by the clock, then the orbit
         const u = reduced ? 1 : Math.min(1, Math.max(0, (now - scT0) / Math.max(1, +SC.duration || 2200))), q = u * u * u * (u * (u * 6 - 15) + 10);   // smootherstep: it eases in and comes to rest
         if (1 + q !== pos) { posTarget = pos = 1 + q; insp = q; }
@@ -864,7 +878,7 @@
       if (colorTw) stepColors(now);
       if (dirty && visible && now - lastRender >= frameMs - 2) { dirty = false; lastRender = now; if (seqUsable()) drawSeq(); else { seqHide(); render(); } }
       inTick = false;
-      const more = colorTw || tw || orbiting() || (SC && scT0 != null && visible && !reduced && (pos < 2 || +SC.orbitSeconds > 0)) || (stepped && follow() && sq !== fq) || (visible && (posTarget !== pos || dirty || (!reduced && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
+      const more = colorTw || tw || orbiting() || orbReturning() || (SC && scT0 != null && visible && !reduced && (pos < 2 || +SC.orbitSeconds > 0)) || (stepped && follow() && sq !== fq) || (visible && (posTarget !== pos || dirty || (!reduced && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
       if (more) wake();
     }
     wake();
@@ -930,5 +944,5 @@
       .then(([, buf]) => new Promise((res, rej) => { const ld = new global.THREE.GLTFLoader(); if (global.MeshoptDecoder) ld.setMeshoptDecoder(global.MeshoptDecoder); ld.parse(buf, url.replace(/[^/]*$/, ''), res, rej); }))
       .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.27.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.28.0' };
 })(typeof window !== 'undefined' ? window : this);
