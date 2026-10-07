@@ -101,6 +101,7 @@
     // on touch devices (a coarse pointer) the work per frame is cut: the canvas at a lower pixel ratio, and at most this many frames a second
     pixelRatioCapCoarse: 1.5,
     fpsCoarse: 30,
+    themeFade: 200,            // ms over which the colours follow a light/dark switch (the site's own html/body transition is .2s); 0 = snap
     flagFpsCoarse: 30          // on touch devices the flag's wave (rebuilt on the CPU) steps at most this many times a second; 0 = every frame
   };
   const COLOR_KEYS = ['primary', 'secondary', 'gridColor', 'face', 'background'];
@@ -168,6 +169,8 @@
   }
   const loadScript = (src, ready) => { if (ready()) return Promise.resolve(); const key = '__loading_' + src; if (!global[key]) global[key] = new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('failed to load ' + src)); document.head.appendChild(s); }); return global[key]; };
   const loadThree = () => loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js', () => !!global.THREE);
+  // a colour part way between two CSS colours, for the theme fade; anything three.js would not parse cleanly snaps to the end
+  const mixColor = (a, b, u) => { if (u >= 1 || a === b || !global.THREE) return b; const ok = v => typeof v === 'string' && /^(#|rgb|hsl)/i.test(v.trim()); if (!ok(a) || !ok(b)) return b; const c = new global.THREE.Color(a); return '#' + c.lerp(new global.THREE.Color(b), u).getHexString(); };
   const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
   // a propeller: `n` blades about the y axis, radius R, hub radius r0. Each blade is a lofted solid: a thin lens
@@ -782,19 +785,35 @@
         // a scroll or a turning prop still draws every frame, the flag simply keeps its last pose between its own steps
         if (flag && flag.shown) { flagT += dt; const fs = coarse && +CONFIG.flagFpsCoarse > 0 ? 1000 / +CONFIG.flagFpsCoarse : 0; if (now - flagLast >= fs - 2) { flagLast = now; flag.update(flagT); dirty = true; } }
       }
+      if (colorTw) stepColors(now);
       if (dirty && visible && now - lastRender >= frameMs - 2) { dirty = false; lastRender = now; render(); }
       inTick = false;
-      const more = tw || (stepped && follow() && sq !== fq) || (visible && (posTarget !== pos || dirty || (!reduced && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
+      const more = colorTw || tw || (stepped && follow() && sq !== fq) || (visible && (posTarget !== pos || dirty || (!reduced && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
       if (more) wake();
     }
     wake();
     let lastColors = '';
+    // a theme change fades the colours over themeFade ms (the page's own background and text transition with it),
+    // rather than snapping; the first paint, reduced motion and colours three.js cannot parse go straight there
+    let shownColors = null, colorTw = null;
     function applyColors() {
       const next = {}; for (const k of COLOR_KEYS) next[k] = resolveColor(host, RAW[k]);
-      const sig = JSON.stringify(next); if (sig === lastColors) return; lastColors = sig; Object.assign(CONFIG, next);
+      const sig = JSON.stringify(next); if (sig === lastColors) return; lastColors = sig;
+      if (!shownColors || reduced || !(+CONFIG.themeFade > 0)) { colorTw = null; paintColors(next); return; }
+      colorTw = { from: shownColors, to: next, t0: performance.now() }; wake();
+    }
+    function stepColors(now) {
+      const u = Math.min(1, (now - colorTw.t0) / +CONFIG.themeFade), e = u * u * (3 - 2 * u), mix = {};
+      for (const k of COLOR_KEYS) mix[k] = mixColor(colorTw.from[k], colorTw.to[k], e);
+      paintColors(mix); if (u >= 1) colorTw = null;
+    }
+    function paintColors(c) {
+      shownColors = c; Object.assign(CONFIG, c);
       host.style.background = CONFIG.background; faceMat.color.set(CONFIG.face); if (hot) for (const it of hot.items) { it.dot.setAttribute('fill', CONFIG.primary); it.path.setAttribute('stroke', CONFIG.primary); it.label.style.color = CONFIG.primary; } gridMat.uniforms.uColor.value.set(CONFIG.gridColor); for (const m of lineMats) { m.uniforms.uBg.value.set(CONFIG.face); if (!ribMats.has(m) && m !== gridMat) m.uniforms.uColor.value.set(CONFIG.secondary); } edgeMat.uniforms.uC2.value.set(CONFIG.secondary); motorColor(ease(progress)); if (!grid) buildGrid(); dirty = true; wake();
     }
     buildHotspots(); applyColors();
+    const themeMO = global.MutationObserver ? new MutationObserver(() => applyColors()) : null;   // the theme toggle flips a class / data-theme on <html>: start the fade at once rather than on the next poll
+    if (themeMO) themeMO.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme', 'data-wf-theme'] });
     const themeWatch = setInterval(() => { if (!alive || !visible) return; applyColors(); if (inspect) { const b = readDockBg(); if (b !== dockBg) { dockBg = b; if (docked) host.style.background = b || CONFIG.background; } } }, 400);
     dockBg = readDockBg();
     const ro = global.ResizeObserver ? new ResizeObserver(frame) : null; if (ro) ro.observe(host); else addEventListener('resize', frame);
@@ -803,7 +822,7 @@
       set(patch) { Object.assign(CONFIG, patch || {}); for (const k of COLOR_KEYS) if (patch && k in patch) { RAW[k] = patch[k]; lastColors = ''; } edgeMat.uniforms.uDepthT.value = +CONFIG.depthEdge || 0.012; edgeMat.uniforms.uNormT.value = +CONFIG.normalEdge || 0.25; edgeMat.uniforms.uNormTM.value = CONFIG.normalEdgeMotor == null ? (+CONFIG.normalEdge || 0.25) : +CONFIG.normalEdgeMotor; if (patch && ('grid' in patch || 'gridExtent' in patch)) buildGrid(); applyColors(); onScroll(); frame(); },
       setProgress(p, q) { progressTarget = progress = Math.min(1, Math.max(0, +p || 0)); inspTarget = insp = Math.min(1, Math.max(0, +q || 0)); if (stepped) { tw = null; sq = insp; posTarget = pos = progress; } else posTarget = pos = progress + insp; place(); wake(); },
       get state() { const d = camera.position.clone().sub(camTarget); return { focus: key, azimuth: azimuth(), startAzimuth: azimuth0(), progress, inspect: stepped ? sq : insp, stepped, step, docked, dock: dk, moving: !!tw, looping: !!raf, visible, heading: [Math.atan2(d.x, d.z) / D2R, Math.atan2(d.y, Math.hypot(d.x, d.z)) / D2R, d.length()], motorHeight: motorH, triangles: tris, props: props.length, pixelRatio: renderer.getPixelRatio(), edgePass: [rt.width, rt.height], tiles: T.nx * T.ny }; },
-      destroy() { alive = false; if (raf) cancelAnimationFrame(raf); for (const o of rowIOs) o.disconnect(); if (endIO) endIO.disconnect(); clearInterval(themeWatch); io.disconnect(); removeEventListener('scroll', onScroll); if (ro) ro.disconnect(); else removeEventListener('resize', frame); rt.dispose(); renderer.dispose(); renderer.domElement.remove(); }
+      destroy() { alive = false; if (raf) cancelAnimationFrame(raf); for (const o of rowIOs) o.disconnect(); if (endIO) endIO.disconnect(); clearInterval(themeWatch); if (themeMO) themeMO.disconnect(); io.disconnect(); removeEventListener('scroll', onScroll); if (ro) ro.disconnect(); else removeEventListener('resize', frame); rt.dispose(); renderer.dispose(); renderer.domElement.remove(); }
     };
   }
 
