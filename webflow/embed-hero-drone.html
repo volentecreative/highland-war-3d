@@ -111,9 +111,10 @@
      heading unwinds along the orbit's own track, the short way round and at the same height and distance, in step with the
      scroll (damped), and is home by 65% of the way, while the camera is still all but on the track (orbitHome, 3.32); then the drone
      comes back and the approach plays in reverse. Paused on the way up, it holds; left still back on the track, the turn
-     eases up again. Over the band, .hero-drone_labels (data-drone-dissolve) holds the Product eyebrow at its top left and a
-     copy of the Ridge-2207 concept caption at its bottom right (.product-caption.is-band); the library sets its opacity from
-     the dissolve, so the two come in as the drone goes and go again as it comes back (dissolveFade, drone-hero.js 3.33).
+     eases up again. Over the band, .hero-drone_labels (data-drone-dissolve) holds the Product eyebrow at its top left, and a
+     copy of the Ridge-2207 concept caption rides on the Ridge copy below, just above its top line at the right
+     (.product-alt_caption, data-drone-dissolve, so it scrolls with the copy); the library sets both opacities from the
+     dissolve, so they come in as the drone goes and go again as it comes back (dissolveFade, drone-hero.js 3.33).
      The band draws at a pixel ratio of up to 2. -->
 <div id="hero-drone" style="width:100%;height:100%;--topo-block:var(--_theme---background-01);--topo-label:var(--_theme---text-01);--topo-label-secondary:var(--_theme---map-boundary);--drone-grid:var(--_theme---text-03)"></div>
 <!-- The poster frame: a still of the drone's first frame, the drone alone (posters/ in the repo, one per layout and theme, chosen here
@@ -128,7 +129,7 @@
     img.src = 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@f269731/posters/drone-start-' + (n ? 'narrow' : 'wide') + '-' + t + '.webp';
   })();
 </script>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@5ded640/drone-hero.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@1447237/drone-hero.js"></script>
 <script>
   var hwPre = window.hwPreloader;
   // up to 991px (the narrow layout) the drone is set up once, at load: no idle propeller turn (the props only
