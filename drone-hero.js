@@ -166,7 +166,11 @@
     line: 0.68,                // a row becomes the active one when its top rises above this share of the viewport's height…
     hysteresis: 0.1,           // … and only gives it up when its top drops back below line + this much, so a row hovering on the line never flickers
     auto: false,               // stepped, 'tween' only: true = no rows — once the drone has arrived (and docked) the camera moves on through every pose by itself over `tween` ms, and back again when the scroll takes it back up
-    orbitSeconds: 0,           // stepped: resting on the last pose, the camera then turns round the motor once every this many seconds while the canvas is on screen; on the way back it unwinds with the move; 0 = no orbit
+    orbitSeconds: 0,           // stepped: once at the last pose, the camera turns round the motor once every this many seconds while the canvas is on screen; on the way back it unwinds with the move; 0 = no orbit
+    orbitDirection: 'approach',   // which way it turns: 'approach' = on in the direction the approach was turning (so it never doubles back), 1 / -1 = toward higher / lower azimuth
+    orbitRamp: 2500,           // ms over which the orbit eases up to speed from rest (smoothstep), so it starts out of the landing rather than at once
+    arriveAt: 1,               // stepped: the camera's approach completes at this share of the scroll to the arrival (e.g. 0.8: it lands with the last 20% to go, and the landing,
+                               // the move to the poses and the orbit start there); the dock still waits for the arrival itself
     tween: 1000,               // ms for the move to a state, on a gentle ease-in-out (a jump of several states takes a third longer per extra state); prefers-reduced-motion: instant
     dock: 0.5,                 // stepped only: once the drone has arrived, the canvas docks to this share of its height at its top, at once (the view is cropped to it,
                                // never reframed, and the canvas resized to it, so it draws only what shows; pointNarrow's y wants to be about half this); 0 = no dock
@@ -554,7 +558,10 @@
     let orb = 0, stepped = false, step = 0, rowStep = 0, gate = false, sq = 0, stepU = 1, tw = null, liveApproach = true, rowIOs = [], endIO = null;
     let fq = 0, fFills = [];   // follow: 'scroll' — the camera's target on the path, and the rows' bars, read from the rows' places
     const follow = () => inspect && inspect.follow === 'scroll';
-    const orbiting = () => stepped && !tw && !reduced && visible && +inspect.orbitSeconds > 0 && step === inspect.poses.length && step > 0;
+    const orbiting = () => stepped && !(tw && tw.orb0 != null) && !reduced && visible && +inspect.orbitSeconds > 0 && step === inspect.poses.length && step > 0;   // at the last pose (a move there may still be running), not while unwinding
+    let orbT = 0;   // seconds the orbit has been running, for its ease up to speed
+    const orbitDir = () => { const d = inspect.orbitDirection; if (d === 1 || d === -1) return d; return azimuth() - azimuth0() < 0 ? -1 : 1; };
+    const arrive = p => { const A = inspect && +inspect.arriveAt; return stepped && A > 0 && A < 1 ? Math.min(1, p / A) : p; };   // the camera's share of the approach
     let dk = 0, docked = false, dockBg = '';   // the dock: 0 = the full canvas, 1 = the band; docked = the canvas has been resized to the band
     const hostHeight0 = host.style.height;   // the host's own inline height (e.g. the embed's height:100%), put back when it undocks
     const wantSteps = () => !!(inspect && endEl && global.IntersectionObserver && (inspect.steps === true || (inspect.steps === 'narrow' && isNarrow())));
@@ -571,7 +578,7 @@
     }
     // the rows count only once the drone has arrived; the dock follows the arrival too
     function updateGate() {
-      const g = progressTarget >= 0.999 ? true : progressTarget < 0.97 ? false : gate; gate = g;
+      const cp = arrive(progressTarget), g = cp >= 0.999 ? true : cp < 0.97 ? false : gate; gate = g;
       if (!follow()) { const k = g ? (inspect.auto ? inspect.poses.length : rowStep) : 0; if (k !== step) goStep(k); }
       const dg = progressTarget >= 0.999 ? true : progressTarget < 0.995 ? false : dk === 1;   // its own, narrow hysteresis: a resize each way, so not on every pixel
       const d = dg && dockF() < 1 ? 1 : 0; if (d !== dk) setDock(d);
@@ -605,7 +612,7 @@
     function writeFills() { if (!rows || !inspect.fillVar) return; const nr = isNarrow(); for (const r of rows) { const v = fFills[r.n - 1] || 0, f = (nr ? Math.round(v * 200) / 200 : v).toFixed(3); if (r.fill !== f) { r.fill = f; r.el.style.setProperty(inspect.fillVar, f); } } }
     function goStep(k) {
       const from = sq, to = stateQ(k), jump = Math.abs(k - step); step = k;
-      orb = ((orb % 360) + 540) % 360 - 180;   // the orbit so far, the short way round, so going back it unwinds by at most half a turn
+      orb = ((orb % 360) + 540) % 360 - 180; if (k < inspect.poses.length) orbT = 0;   // the orbit so far, the short way round, so going back it unwinds by at most half a turn
       if (reduced || !(+inspect.tween > 0)) { sq = to; tw = null; stepU = 1; if (k < inspect.poses.length) orb = 0; } else { tw = { from, to, t0: performance.now(), dur: +inspect.tween * (1 + (Math.max(1, jump) - 1) / 3), orb0: k < inspect.poses.length ? orb : null }; stepU = 0; }
       if (rows) for (const r of rows) r.from = r.fill == null ? 0 : +r.fill;   // each row's bar runs from where it is
       shownPos = -1; wake();
@@ -629,14 +636,14 @@
       // the approach is live while the end element is on screen or below it; once it is above, the scroll is not read at all
       endIO = new IntersectionObserver(en => { const e = en[en.length - 1], live = e.isIntersecting || e.boundingClientRect.top > 0; if (live !== liveApproach) { liveApproach = live; onScroll(); } }); endIO.observe(endEl);
       // entered mid-way (a load or a resize part-way down): straight to where the page is, with no move
-      rowStep = readRows(); liveApproach = true; progressTarget = readProgress(); posTarget = pos = progress = progressTarget; inspTarget = 0;
-      gate = progressTarget >= 0.999; step = gate ? (inspect.auto ? inspect.poses.length : rowStep) : 0; sq = stateQ(step);
+      rowStep = readRows(); liveApproach = true; progressTarget = readProgress(); posTarget = pos = progress = arrive(progressTarget); inspTarget = 0;
+      gate = arrive(progressTarget) >= 0.999; step = gate ? (inspect.auto ? inspect.poses.length : rowStep) : 0; sq = stateQ(step);
       if (gate && dockF() < 1) { dk = 1; dockDone(); }
       if (follow()) { readFollow(); sq = fq; }
       shownPos = -1;
     }
     function leaveSteps() {
-      orb = 0;
+      orb = 0; orbT = 0;
       for (const o of rowIOs) o.disconnect(); rowIOs = []; if (endIO) endIO.disconnect(); endIO = null; liveApproach = true;
       pos = Math.min(1, pos) + sq; stepped = false; tw = null; dk = 0; sq = 0; stepU = 1;
       if (docked) { docked = false; host.style.height = hostHeight0; host.style.background = CONFIG.background; dockMark(false); }
@@ -822,7 +829,7 @@
       if (SC) { wake(); return; }   // a showcase does not follow the scroll
       if (stepped) {   // the approach follows the scroll until the end element has gone by; after that the scroll is not read (the props stop with it)
         if (liveApproach) { spinTarget = (global.scrollY || 0) / 1000 * (+CONFIG.propScroll || 0) * Math.PI * 2; progressTarget = readProgress(); } else progressTarget = 1;
-        inspTarget = 0; posTarget = progressTarget; updateGate(); if (follow()) readFollow(); wake(); if (!liveApproach) return;
+        inspTarget = 0; posTarget = arrive(progressTarget); updateGate(); if (follow()) readFollow(); wake(); if (!liveApproach) return;
       } else { spinTarget = (global.scrollY || 0) / 1000 * (+CONFIG.propScroll || 0) * Math.PI * 2; progressTarget = trackEl ? readProgress() : 1; inspTarget = readInspect(); posTarget = progressTarget + inspTarget; }
       setVar(CONFIG.scrollVar, ease(progressTarget), 3); wake();
       if (trackEl && CONFIG.exitVar) { const tr = trackEl.getBoundingClientRect(), hr = host.getBoundingClientRect(); const ex = Math.min(1, Math.max(0, 1 - (tr.bottom - hr.top) / Math.max(1, hr.height))).toFixed(4); host.style.setProperty(CONFIG.exitVar, ex); trackEl.style.setProperty(CONFIG.exitVar, ex); } };
@@ -838,7 +845,7 @@
       // a state's move: time-based, on one ease; the scroll has no hand in it
       if (stepped && follow() && sq !== fq) { sq = reduced ? fq : sq + (fq - sq) * Math.min(1, (+CONFIG.damping || 0.12) * dt * 60); if (Math.abs(fq - sq) < 1e-5) sq = fq; shownPos = -1; }   // following: damped as the approach is
       if (tw) { const u = Math.min(1, (now - tw.t0) / tw.dur); stepU = u; sq = tw.from + (tw.to - tw.from) * easeIO(u); if (tw.orb0 != null) orb = tw.orb0 * (1 - easeIO(u)); if (u >= 1) { sq = tw.to; tw = null; } shownPos = -1; }
-      if (orbiting()) { orb += dt * 360 / +inspect.orbitSeconds; shownPos = -1; }   // resting on the last pose: the slow turn round the motor
+      if (orbiting()) { orbT += dt; const r = Math.min(1, orbT * 1000 / Math.max(1, +inspect.orbitRamp || 0)), e = r * r * (3 - 2 * r); orb += orbitDir() * e * dt * 360 / +inspect.orbitSeconds; shownPos = -1; }   // at the last pose: the slow turn round the motor, eased up to speed
       if (SC && scT0 != null) {   // the showcase: the move by the clock, then the orbit
         const u = reduced ? 1 : Math.min(1, Math.max(0, (now - scT0) / Math.max(1, +SC.duration || 2200))), q = u * u * u * (u * (u * 6 - 15) + 10);   // smootherstep: it eases in and comes to rest
         if (1 + q !== pos) { posTarget = pos = 1 + q; insp = q; }
@@ -923,5 +930,5 @@
       .then(([, buf]) => new Promise((res, rej) => { const ld = new global.THREE.GLTFLoader(); if (global.MeshoptDecoder) ld.setMeshoptDecoder(global.MeshoptDecoder); ld.parse(buf, url.replace(/[^/]*$/, ''), res, rej); }))
       .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.26.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.27.0' };
 })(typeof window !== 'undefined' ? window : this);
