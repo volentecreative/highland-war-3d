@@ -154,7 +154,7 @@
   function paint() {
     if (!el) return;
     var target = finished ? 1 : Math.min(0.99, real(), seen ? 1 : (Date.now() - t0) / MIN);   // first visit: the bar is paced to fill over MIN, so it never races to 100% and waits
-    shown += (target - shown) * (reduced ? 1 : 0.18);
+    shown += (target - shown) * (reduced ? 1 : finished ? 0.4 : 0.18);   // once loaded it closes quickly, so the hold shows 100%
     if (target - shown < 0.002) shown = target;
     fill.style.transform = 'scaleX(' + shown.toFixed(3) + ')';
     var p = Math.round(shown * 100);
