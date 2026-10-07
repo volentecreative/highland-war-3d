@@ -173,6 +173,8 @@
                                // straight on into it, never stopping; back up past [0] the heading springs home (critically damped, the short way round);
                                // null = [arriveAt - 0.2, arriveAt]
     orbitReturnSeconds: 1.6,   // … the spring's period on the way back
+    orbitHome: null,           // stepped: where (of the scroll to the arrival) the heading is home on the way back up, unwinding from where the scroll turned; null = arriveAt.
+                               // Set it a little below arriveAt to spread the unwind over more scroll while the camera is still all but on the track
     dissolveScroll: null,      // stepped auto only: [a, b] of the scroll to the arrival (as orbitScroll) over which the move to the poses (the drone dissolving) plays,
                                // on the scroll and damped as the approach, both ways, instead of in time (tween) once arrived; null = in time
     arriveAt: 1,               // stepped: the camera's approach completes at this share of the scroll to the arrival (e.g. 0.8: it lands with the last 20% to go, and the landing,
@@ -582,7 +584,7 @@
     function orbScroll(p) {   // the scroll moved: start, follow or end the way home
       if (!stepped || !inspect || !(+inspect.orbitSeconds > 0)) return;
       const up = p < lastPT, A = +inspect.arriveAt > 0 && +inspect.arriveAt < 1 ? +inspect.arriveAt : 1, w = Array.isArray(inspect.orbitScroll) ? inspect.orbitScroll : [Math.max(0, A - 0.2), A];
-      if (up && !ret && orb !== 0) { orb = ((orb % 360) + 540) % 360 - 180; orbTgt = orb; orbVel = 0; orbWas = false; orbSpd = 0; ret = { o: orb, p: lastPT, low: lastPT > A + 1e-3 ? A : Math.min(w[0], lastPT - 1e-3) }; }
+      if (up && !ret && orb !== 0) { orb = ((orb % 360) + 540) % 360 - 180; orbTgt = orb; orbVel = 0; orbWas = false; orbSpd = 0; ret = { o: orb, p: lastPT, low: lastPT > A + 1e-3 ? (+inspect.orbitHome > 0 && +inspect.orbitHome < A ? +inspect.orbitHome : A) : Math.min(w[0], lastPT - 1e-3) }; }
       else if (!up && ret) { ret = null; orb = orbTgt = orb; }   // back down: the turn carries on from here (easing up to speed)
       lastPT = p; lastScrollAt = performance.now();
       if (ret) { const u = Math.min(1, Math.max(0, (p - ret.low) / Math.max(1e-6, ret.p - ret.low))); orbTgt = ret.o * u * u * (3 - 2 * u); wake(); }
@@ -723,7 +725,7 @@
     // the camera and everything that follows the scroll, for the current pos: the approach (its fades over its eased
     // progress e) running on into the inspection where there is one
     function place() {
-      const P = curPos(), useInsp = !!inspect, p = Math.min(1, P), e = ease(p), q = useInsp ? Math.max(0, P - 1) : 0;
+      const scr = stepped && scrubbed(), P = scr ? Math.min(1, pos) : curPos(), useInsp = !!inspect, p = Math.min(1, P), e = ease(p), q = scr ? sq : useInsp ? Math.max(0, P - 1) : 0;   // dissolveScroll: the dissolve runs beside the approach, never on the camera's path (its pose is the arrival's)
       let cpos = useInsp ? P : p; if (useInsp) { const WL = inspect.windows[inspect.windows.length - 1] || [0, 1], L = inspect.easeOut == null ? WL[1] - WL[0] : +inspect.easeOut; if (L > 0 && P > 2 - L) { const u = Math.min(1, (P - (2 - L)) / L); cpos = 2 - L + L * (u + u * u - u * u * u); } }   // the last stretch eased out: the camera's speed falls smoothly to nothing at the end (easeOut)
       const c = camAt(cpos, useInsp); if (SC) c.az += scOrbit; c.az += orb;   // the showcase's orbit, on top of its pose
       pivot.rotation.x = tiltRad * (1 - e); pivot.updateMatrixWorld(true);   // pitched at the top of the page, level by the arrival
@@ -759,7 +761,7 @@
       if (active !== activeRow && rows) { activeRow = active; for (const r of rows) { const on = r.n === active + 1; r.el.classList.toggle(inspect.activeClass || 'is-active', on); if (inspect.activeVar) r.el.style.setProperty(inspect.activeVar, on ? '1' : '0'); } }
       if (rows && inspect.fillVar) { const nr = isNarrow(); for (const r of rows) { const v = s ? s.fills[r.n - 1] || 0 : 0, f = (nr ? Math.round(v * 200) / 200 : v).toFixed(3); if (r.fill !== f) { r.fill = f; r.el.style.setProperty(inspect.fillVar, f); } } }
       if (rows) for (const r of rows) { const w = inspect.windows[r.n - 1]; if (!w) continue; const reached = stepped ? r.n <= step : q >= w[0] ? true : q < w[0] - 0.02 ? false : !!r.reached; if (reached !== !!r.reached) { r.reached = reached; const n = reached ? inspect.reachEvent : inspect.unreachEvent; if (n) r.el.dispatchEvent(new CustomEvent(n, { bubbles: true })); } }
-      dirty = true; shownPos = P;
+      dirty = true; shownPos = curPos();   // what the loop compares against (with dissolveScroll that is not P)
       if (endEl) { const a = P >= 0.98 ? true : P < 0.9 ? false : arrived; if (a !== arrived) { arrived = a; const n = a ? CONFIG.arriveEvent : CONFIG.leaveEvent; if (n) endEl.dispatchEvent(new CustomEvent(n, { bubbles: true })); } }
       setVar(CONFIG.progressVar, e, 3); if (inspect) setVar(inspect.inspectVar, q, 3);
     }
@@ -879,7 +881,7 @@
         const f = orbitF(progressTarget);
         const A = +inspect.arriveAt > 0 && +inspect.arriveAt < 1 ? +inspect.arriveAt : 1;
         if (ret && now - lastScrollAt > 600 && progressTarget >= A && Math.abs(orbTgt - orb) < 0.05) { ret = null; orbSpd = 0; }   // left still on the track: the turn picks up again, easing up from rest (short of it, it stays put)
-        if (ret) { if (orb !== orbTgt) { orb = reduced ? orbTgt : orb + (orbTgt - orb) * Math.min(1, (+CONFIG.damping || 0.12) * dt * 60); if (Math.abs(orbTgt - orb) < 1e-3) orb = orbTgt; shownPos = -1; } }   // the heading follows the scroll home, damped as the approach is
+        if (ret) { if (orb !== orbTgt) { orb = reduced ? orbTgt : orb + (orbTgt - orb) * Math.min(1, 0.7 * (+CONFIG.damping || 0.12) * dt * 60); if (Math.abs(orbTgt - orb) < 1e-3) orb = orbTgt; shownPos = -1; } }   // the heading follows the scroll home, damped as the approach is
         else if (f > 0) { orbSpd += (f - orbSpd) * Math.min(1, dt * 1.5); if (visible) { orb += orbitDir() * orbSpd * dt * 360 / +inspect.orbitSeconds; shownPos = -1; } orbTgt = orb; orbVel = 0; orbWas = true; }
         else if (orb !== 0 || orbVel !== 0) {
           if (orbWas) { orb = ((orb % 360) + 540) % 360 - 180; orbVel = 0; orbWas = false; }   // the short way round
@@ -970,5 +972,5 @@
       .then(([, buf]) => new Promise((res, rej) => { const ld = new global.THREE.GLTFLoader(); if (global.MeshoptDecoder) ld.setMeshoptDecoder(global.MeshoptDecoder); ld.parse(buf, url.replace(/[^/]*$/, ''), res, rej); }))
       .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.31.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.32.0' };
 })(typeof window !== 'undefined' ? window : this);
