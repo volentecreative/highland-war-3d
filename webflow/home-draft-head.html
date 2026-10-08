@@ -24,8 +24,9 @@
      .preloader_component) - all lives in the style panel. Its class is display none in the Designer so it does not
      cover the canvas; add the combo is-preview to see and edit it there (and take it off after). Custom code below
      only because it has to act before the page paints and can't be expressed as classes: the html.hw-preloader rule
-     that shows it on the live page, the label waiting for the web fonts (wf-active) so it never swaps typeface in
-     view, and the script, which runs the bar and adds is-done (.preloader_component.is-done: opacity 0) to fade it.
+     that shows it on the live page, and the script, which runs the bar, writes the percentage counter
+     ([data-hw-preloader-count], beside the "Loading" label in .preloader_status: the bar's own progress, zero-padded
+     as 000%, so the two always agree) and adds is-done (.preloader_component.is-done: opacity 0) to fade it.
      The drone is part of the scroll choreography, so the page is never scrollable before it is drawn: on every load
      (a reload too) the browser's scroll restoration is off and the page starts at the top, the scroll is locked, and
      the hero copy is held back (hw-gate), while the page is laid out underneath with the drone's poster frame (a
@@ -47,8 +48,6 @@
      tablets keep their native overlay scrollbars. The script that drives it is in the page's footer code. -->
 <style>
   html.hw-preloader [data-hw-preloader] { display: flex; }
-  [data-hw-preloader-label] { transition: opacity 250ms ease; }
-  html:not(.wf-active):not(.wf-inactive) [data-hw-preloader-label] { opacity: 0; }
   html.hw-scrollbar { scrollbar-width: none; }
   html.hw-scrollbar::-webkit-scrollbar, html.hw-scrollbar body::-webkit-scrollbar { display: none; }
   html.hw-preloading, html.hw-preloading body { overflow: hidden; }
@@ -82,11 +81,12 @@
   document.addEventListener('wheel', block, { passive: false });
 
   /* ---- the overlay is the Designer element; the bar starts as soon as it is parsed (the first frame) ---- */
-  var el = null, fill = null, run = null;
+  var el = null, fill = null, run = null, count = null, shownPct = -1;
   function grab() {
     if (el) return true;
     el = document.querySelector('[data-hw-preloader]'); if (!el) return false;
-    fill = el.querySelector('[data-hw-preloader-fill]');
+    fill = el.querySelector('[data-hw-preloader-fill]'); count = el.querySelector('[data-hw-preloader-count]');
+    if (fill) requestAnimationFrame(tick);
     if (fill && !unlocked) {
       fill.style.transform = 'scaleX(0.95)';
       if (!reduced && fill.animate) {
@@ -102,6 +102,13 @@
     return true;
   }
   (function poll() { if (!grab() && document.readyState === 'loading') requestAnimationFrame(poll); })();
+  /* the counter reads the bar each frame (zero-padded: 000% to 100%), and only touches the text when the number changes */
+  function tick() {
+    if (!el) return;
+    var p = Math.round(scaleNow() * 100);
+    if (p !== shownPct) { shownPct = p; if (count) count.textContent = ('00' + p).slice(-3) + '%'; el.setAttribute('aria-valuenow', p); }
+    requestAnimationFrame(tick);
+  }
   function scaleNow() { var m = fill && /matrix\(([^,]+)/.exec(getComputedStyle(fill).transform || ''); return m ? +m[1] : 0; }
   function bar(to, ms, ease) {
     if (!fill) return; var from = scaleNow(); if (run) run.cancel();
