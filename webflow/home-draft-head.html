@@ -36,12 +36,14 @@
      model, the line work), so the only thing that moves is the bar, a single Web Animation of the fill's transform
      started with the first frame (it runs off the main thread): to 85% over the first 1s, creeping on toward 95% if
      the load is slower, closing to 100% once it is done. The drone underneath holds its flag and propellers until
-     the overlay is fading (window.hwPreloader.done; drone-hero.js holdUntil), so it does not redraw behind it.
+     the bar closes (window.hwPreloader.closing; drone-hero.js holdUntil), so it does not redraw behind it meanwhile.
      The lift is staged so the heavy work happens behind the opaque overlay, never during its fade: once loaded (and
-     the 1s is up) the bar closes, and at the same moment the scroll unlocks and every scroll scene re-measures (a
-     resize; Lenis too); then, after a 350ms beat at 100%, the overlay fades out (is-done), the hero copy fading in
-     beneath it and the poster crossfading into the live canvas; the hero copy deciphers (window.hwPreloader.done, which
-     the scramble embed waits on) as the fade ends. A link to an #anchor on this page is followed then.
+     the 1s is up) the bar closes, and at the same moment every scroll scene re-measures (a resize; Lenis too), the
+     drone's poster gives way to the live canvas and the drone wakes (its flag and propellers moving: closing); then,
+     after a 350ms beat at 100%, the overlay fades out (is-done) and the hero copy fades in beneath it and deciphers
+     (window.hwPreloader.done, which the scramble embed waits on). The drone then flies up into its place (its intro,
+     in the drone embed), and the scroll stays locked until it has landed (holdScroll; at most 5s after the fade); a
+     link to an #anchor on this page unlocks at once and is followed then.
      Scrollbar: on mouse and trackpad devices (pointer: fine) the browser's own scrollbar is hidden (html.hw-scrollbar)
      and the page's own, .scrollbar_component (a Designer element at the end of the body, styled there), shows over the
      content while scrolling or near the right edge, so the layout never shifts when the scroll unlocks. Phones and
@@ -66,6 +68,7 @@
   var root = document.documentElement, t0 = Date.now();
   var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var resolveDone, done = new Promise(function (r) { resolveDone = r; });
+  var resolveClosing, closing = new Promise(function (r) { resolveClosing = r; });
   if (window.matchMedia && window.matchMedia('(pointer: fine)').matches) root.classList.add('hw-scrollbar');   // the page's own scrollbar (footer code)
 
   /* every load starts at the top, whatever the browser remembers; a #anchor is followed once the gate lifts */
@@ -74,8 +77,9 @@
   if (hash) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} }   // so the browser does not jump there now
   window.scrollTo(0, 0);
 
-  var api = window.hwPreloader = { done: done, report: function () {}, track: function (n, p) { return p; }, drone: function () {} };
+  var api = window.hwPreloader = { done: done, closing: closing, holdScroll: function (p) { holds.push(p); return p; }, report: function () {}, track: function (n, p) { return p; }, drone: function () {} };
   root.classList.add('hw-preloading', 'hw-gate', 'hw-preloader');
+  var holds = [], HOLD_MAX = 5000;   // what the scroll waits for after the fade (the drone's flight in); at most 5s
   var block = function (e) { e.preventDefault(); };
   document.addEventListener('touchmove', block, { passive: false });   // iOS can still scroll an overflow:hidden page by touch
   document.addEventListener('wheel', block, { passive: false });
@@ -148,23 +152,38 @@
   }
   var failsafe = setTimeout(function () { finished = true; close(); }, MAX);
 
-  /* 1) the bar closes, and behind the still-opaque overlay the page unlocks and every scroll scene re-measures */
-  var unlocked = false, lifted = false;
+  /* 1) the bar closes, and behind the still-opaque overlay every scroll scene re-measures, the drone's poster gives way to
+     the live canvas and the drone starts moving (window.hwPreloader.closing), so it is already alive when the overlay fades */
+  var unlocked = false, lifted = false, freed = false;
   function close() {
     if (unlocked) return; unlocked = true; clearTimeout(failsafe); grab();
     bar(1, CLOSE - 50, 'cubic-bezier(.4,0,.2,1)');
     if (!hash) window.scrollTo(0, 0);
-    root.classList.remove('hw-preloading');
-    try { if (typeof lenis !== 'undefined') { if (lenis.resize) lenis.resize(); if (lenis.start) lenis.start(); } } catch (e) {}
+    try { if (typeof lenis !== 'undefined' && lenis.resize) lenis.resize(); } catch (e) {}
     window.dispatchEvent(new Event('resize'));
+    if (droneOk) {   // the live canvas takes over from the poster under the still-opaque overlay, at once (a failed drone keeps its poster)
+      root.classList.add('hw-drone-live'); var poster = document.querySelector('.hw-drone-poster'); if (poster && poster.parentNode) poster.parentNode.removeChild(poster); }
+    resolveClosing();
     setTimeout(lift, reduced || !el ? 0 : CLOSE);
   }
-  /* 2) the overlay fades (is-done); the hero copy fades in beneath it and deciphers as the fade ends */
+  /* 3) the scroll unlocks once whatever holds it has settled (the drone's flight in: window.hwPreloader.holdScroll), or
+     after 5s at most; at once when a link brought the visitor to an #anchor */
+  function free() {
+    if (freed) return; freed = true;
+    if (!hash) window.scrollTo(0, 0);
+    root.classList.remove('hw-preloading');
+    document.removeEventListener('touchmove', block); document.removeEventListener('wheel', block);
+    try { if (typeof lenis !== 'undefined') { if (lenis.resize) lenis.resize(); if (lenis.start) lenis.start(); } } catch (e) {}
+    if (hash) {
+      try { history.replaceState(null, '', location.pathname + location.search + hash); } catch (e) {}
+      var t = null; try { t = document.querySelector(hash); } catch (e) {}
+      if (t) { try { if (typeof lenis !== 'undefined' && lenis.scrollTo) lenis.scrollTo(t, { immediate: true }); else t.scrollIntoView(); } catch (e) { t.scrollIntoView(); } }
+    }
+  }
+  /* 2) the overlay fades (is-done); the hero copy fades in beneath it and deciphers as the fade ends, and the drone flies in */
   function lift() {
     if (lifted) return; lifted = true;
-    document.removeEventListener('touchmove', block); document.removeEventListener('wheel', block);
     requestAnimationFrame(function () {
-      if (droneOk) root.classList.add('hw-drone-live');   // the poster fades into the live canvas (a failed drone keeps its poster)
       root.classList.remove('hw-gate');
       var fade = fadeMs();
       if (el) { el.removeAttribute('aria-busy'); el.classList.add('is-done'); }
@@ -172,13 +191,9 @@
       setTimeout(function () {
         root.classList.remove('hw-preloader');
         if (el && el.parentNode) el.parentNode.removeChild(el); el = null;
-        if (droneOk) { var p = document.querySelector('.hw-drone-poster'); if (p && p.parentNode) p.parentNode.removeChild(p); }
       }, fade + 50);
-      if (hash) {
-        try { history.replaceState(null, '', location.pathname + location.search + hash); } catch (e) {}
-        var t = null; try { t = document.querySelector(hash); } catch (e) {}
-        if (t) { try { if (typeof lenis !== 'undefined' && lenis.scrollTo) lenis.scrollTo(t, { immediate: true }); else t.scrollIntoView(); } catch (e) { t.scrollIntoView(); } }
-      }
+      if (hash || reduced) free();
+      else { setTimeout(free, fade + HOLD_MAX); Promise.all(holds.map(function (p) { return Promise.resolve(p).catch(function () {}); })).then(free); }
     });
   }
 })();

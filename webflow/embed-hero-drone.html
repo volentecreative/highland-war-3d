@@ -118,8 +118,8 @@
      The band draws at a pixel ratio of up to 2. -->
 <div id="hero-drone" style="width:100%;height:100%;--topo-block:var(--_theme---background-01);--topo-label:var(--_theme---text-01);--topo-label-secondary:var(--_theme---map-boundary);--drone-grid:var(--_theme---text-03)"></div>
 <!-- The poster frame: a still of the drone's first frame, the drone alone (posters/ in the repo, one per layout and theme, chosen here
-     before it paints), over the canvas while the page's load gate is up; it fades into the live canvas (the flag fades in with it) when the gate
-     lifts and is then removed (the head code places and fades it: .hw-drone-poster). If the drone fails it stays. -->
+     before it paints), over the canvas while the page's load gate is up; the head code removes it under the still-opaque preloader once the
+     drone is drawn (.hw-drone-poster), and the drone then flies in (intro, below). If the drone fails it stays. -->
 <div class="hw-drone-poster" aria-hidden="true"><img alt="" decoding="async" fetchpriority="high"></div>
 <script>
   (function () {
@@ -129,14 +129,22 @@
     img.src = 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@f269731/posters/drone-start-' + (n ? 'narrow' : 'wide') + '-' + t + '.webp';
   })();
 </script>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@25236e1/drone-hero.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@558db63/drone-hero.js"></script>
 <script>
-  var hwPre = window.hwPreloader;
+  var hwPre = window.hwPreloader, hwIntroDone = function () {};
+  if (hwPre && hwPre.holdScroll) hwPre.holdScroll(new Promise(function (r) { hwIntroDone = r; }));
   // up to 991px (the narrow layout) the drone is set up once, at load: no idle propeller turn (the props only
   // follow the scroll), a smaller flag hung higher, the drone a touch closer
   var hwNarrow = matchMedia('(max-width: 991px)').matches;
   var hwDrone = window.DroneHero ? DroneHero.mount('#hero-drone', {
-    holdUntil: hwPre && hwPre.done,      // under the preloader the flag and propellers hold still, so the drone does not redraw behind it; they start as it fades (drone-hero.js 3.34)
+    holdUntil: hwPre && hwPre.closing,   // under the preloader the flag and propellers hold still, so the drone does not redraw behind it; they start as the bar closes, so it is alive when the overlay fades (drone-hero.js 3.34)
+    intro: hwPre ? {                      // then it flies in: from below and behind its place, up and forward into it, its propellers spun up and slowing as it lands (drone-hero.js 3.35)…
+      at: hwPre.done, delay: 300,         // … starting just after the hero copy begins to decipher…
+      duration: 1800,                     // … over this long, on an ease-out…
+      rise: 1.6, back: 3,                 // … from this far below and behind (in the drone's radius)…
+      spin: 2.5,                          // … the propellers at this many extra turns a second at the start…
+      onDone: function () { hwIntroDone(); }   // … and the page's scroll unlocks once it has landed (head code: holdScroll)
+    } : null,
     onProgress: hwPre && hwPre.drone,     // the preloader's bar follows the real load (drone-hero.js 3.20)
     model: 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@be27eae/heavy_lift_drone_model.meshopt.glb',   // the meshopt-compressed model (342 KB; the same lines as the 2.65 MB original beside it); the library fetches three.js's meshopt decoder alongside it
     focus: 'FR',                          // the motor the path ends on. HWI's model names the arms from the pilot's seat, so FR is the front motor on the camera's left, seen from the front (FL, BR, BL for the others)
@@ -187,4 +195,5 @@
     }
   }) : Promise.reject(new Error('drone-hero.js did not load'));
   if (hwPre) hwPre.track('drone', hwDrone);   // the preloader lifts once the drone is drawn (or has failed)
+  hwDrone.catch(function () { hwIntroDone(); });   // a drone that failed never flies in: the scroll unlocks without it
 </script>
