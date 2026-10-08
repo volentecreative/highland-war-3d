@@ -24,7 +24,7 @@
      (a reload too) the browser's scroll restoration is off and the page starts at the top, the scroll is locked, and
      the hero copy is held back (hw-gate), while the page is laid out underneath with the drone's poster frame (a
      still of its first frame without the flag, in the drone embed) in the canvas's place.
-     Every load shows the full preloader (the Highland mark, still, over a bar), for at least 2s so it reads as
+     Every load shows the full preloader (the Highland mark, still, over a bar), for at least 1s so it reads as
      intended; the gate gives up after 8s (the poster then stays as the drone's stand-in if it failed).
      Smoothness: while it shows, the page's main thread is busy (three.js, the model, the line work), so the only thing
      that moves is the bar, and nothing in the preloader is driven by script frame by frame: the bar and the fades are
@@ -32,11 +32,11 @@
      (a turning mark needed a fresh frame every 16ms and showed every hitch of the load), and the drone underneath
      holds its flag and propellers until the overlay is fading (window.hwPreloader.done; drone-hero.js holdUntil), so
      it does not redraw behind the overlay or hold up the start of the fade.
-     The bar is a single Web Animation, started with the first frame: it runs to 85% over the first 2s on a gentle
+     The bar is a single Web Animation, started with the first frame: it runs to 85% over the first 1s on a gentle
      ease-out and creeps on toward 95% if the load is slower, all in one go (not a script timer starting each leg,
      which a busy main thread held back, so the bar sat at 85%), and closes to 100% once it is done. The label waits for the web fonts (wf-active), so it never swaps typeface in view.
      The lift is staged so the heavy work happens behind the opaque overlay, never during its fade: once loaded (and
-     the 2s are up) the bar closes, and at the same moment the scroll unlocks and every scroll scene re-measures (a
+     the 1s is up) the bar closes, and at the same moment the scroll unlocks and every scroll scene re-measures (a
      resize; Lenis too); then, after a 350ms beat at 100%, the overlay fades out over 500ms, the hero copy fading in
      beneath it and the poster crossfading into the live canvas; the hero copy deciphers (window.hwPreloader.done, which
      the scramble embed waits on) as the fade ends. A link to an #anchor on this page is followed then. -->
@@ -73,7 +73,7 @@
 <script>
 (function () {
   'use strict';
-  var MIN = 2000, MAX = 8000, CLOSE = 350, FADE = 500;
+  var MIN = 1000, MAX = 8000, CLOSE = 350, FADE = 500;
   var root = document.documentElement, t0 = Date.now();
   var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var resolveDone, done = new Promise(function (r) { resolveDone = r; });
@@ -115,7 +115,7 @@
     if (reduced || !fill.animate) return;
     run = fill.animate([{ transform: 'scaleX(' + from + ')' }, { transform: 'scaleX(' + to + ')' }], { duration: ms, easing: ease });
   }
-  /* one animation from the first frame: to 85% over the first 2s on a gentle ease-out, then on toward 95% by the 8s
+  /* one animation from the first frame: to 85% over the first 1s on a gentle ease-out, then on toward 95% by the 8s
      failsafe for a slow load, so it never waits on the busy main thread to start its next leg */
   fill.style.transform = 'scaleX(0.95)';
   if (!reduced && fill.animate) run = fill.animate([
@@ -147,7 +147,7 @@
   function check() { if (!finished && closed && !Object.keys(pending).length) finish(); }
   function finish() {
     if (finished) return; finished = true;
-    setTimeout(close, Math.max(0, MIN - (Date.now() - t0)));   // at least 2s
+    setTimeout(close, Math.max(0, MIN - (Date.now() - t0)));   // at least 1s
   }
   var failsafe = setTimeout(function () { finished = true; close(); }, MAX);
 
