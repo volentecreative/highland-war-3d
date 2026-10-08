@@ -129,7 +129,7 @@
     img.src = 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@f269731/posters/drone-start-' + (n ? 'narrow' : 'wide') + '-' + t + '.webp';
   })();
 </script>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@558db63/drone-hero.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@0e8d2bc/drone-hero.js"></script>
 <script>
   var hwPre = window.hwPreloader, hwIntroDone = function () {};
   if (hwPre && hwPre.holdScroll) hwPre.holdScroll(new Promise(function (r) { hwIntroDone = r; }));
@@ -143,6 +143,7 @@
       duration: 1800,                     // … over this long, on an ease-out…
       rise: 1.6, back: 3,                 // … from this far below and behind (in the drone's radius)…
       spin: 2.5,                          // … the propellers at this many extra turns a second at the start…
+      flagIn: 900,                        // … the flag hidden until it has landed, then fading in over this long…
       onDone: function () { hwIntroDone(); }   // … and the page's scroll unlocks once it has landed (head code: holdScroll)
     } : null,
     onProgress: hwPre && hwPre.drone,     // the preloader's bar follows the real load (drone-hero.js 3.20)
