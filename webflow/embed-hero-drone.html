@@ -129,13 +129,14 @@
     img.src = 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@f269731/posters/drone-start-' + (n ? 'narrow' : 'wide') + '-' + t + '.webp';
   })();
 </script>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@1447237/drone-hero.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@25236e1/drone-hero.js"></script>
 <script>
   var hwPre = window.hwPreloader;
   // up to 991px (the narrow layout) the drone is set up once, at load: no idle propeller turn (the props only
   // follow the scroll), a smaller flag hung higher, the drone a touch closer
   var hwNarrow = matchMedia('(max-width: 991px)').matches;
   var hwDrone = window.DroneHero ? DroneHero.mount('#hero-drone', {
+    holdUntil: hwPre && hwPre.done,      // under the preloader the flag and propellers hold still, so the drone does not redraw behind it; they start as it fades (drone-hero.js 3.34)
     onProgress: hwPre && hwPre.drone,     // the preloader's bar follows the real load (drone-hero.js 3.20)
     model: 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@be27eae/heavy_lift_drone_model.meshopt.glb',   // the meshopt-compressed model (342 KB; the same lines as the 2.65 MB original beside it); the library fetches three.js's meshopt decoder alongside it
     focus: 'FR',                          // the motor the path ends on. HWI's model names the arms from the pilot's seat, so FR is the front motor on the camera's left, seen from the front (FL, BR, BL for the others)
