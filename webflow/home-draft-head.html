@@ -18,45 +18,39 @@
     html:has(.navbar_menu.is-open) .hero-drone_labels { visibility: hidden; }
   }
 </style>
-<!-- Load gate and preloader (every load). Custom code because it has to act before the
-     page paints: it is built here in <head> and put straight on <html>, so the Designer never sees it.
+<!-- Load gate and preloader (every load). The preloader itself is a Designer element (.preloader_component, the first
+     thing in the body, data-hw-preloader): its look - the background, the mark (an embed holding the SVG outline, in
+     the text colour), the "Loading" label, the bar and its fill, the gap, the fade's duration (the transition on
+     .preloader_component) - all lives in the style panel. Its class is display none in the Designer so it does not
+     cover the canvas; add the combo is-preview to see and edit it there (and take it off after). Custom code below
+     only because it has to act before the page paints and can't be expressed as classes: the html.hw-preloader rule
+     that shows it on the live page, the label waiting for the web fonts (wf-active) so it never swaps typeface in
+     view, and the script, which runs the bar and adds is-done (.preloader_component.is-done: opacity 0) to fade it.
      The drone is part of the scroll choreography, so the page is never scrollable before it is drawn: on every load
      (a reload too) the browser's scroll restoration is off and the page starts at the top, the scroll is locked, and
      the hero copy is held back (hw-gate), while the page is laid out underneath with the drone's poster frame (a
      still of its first frame without the flag, in the drone embed) in the canvas's place.
-     Every load shows the full preloader (the Highland mark, still, over a bar), for at least 1s so it reads as
-     intended; the gate gives up after 8s (the poster then stays as the drone's stand-in if it failed).
-     Smoothness: while it shows, the page's main thread is busy (three.js, the model, the line work), so the only thing
-     that moves is the bar, and nothing in the preloader is driven by script frame by frame: the bar and the fades are
-     transitions/animations of transform and opacity, which the browser runs off the main thread. The mark holds still
-     (a turning mark needed a fresh frame every 16ms and showed every hitch of the load), and the drone underneath
-     holds its flag and propellers until the overlay is fading (window.hwPreloader.done; drone-hero.js holdUntil), so
-     it does not redraw behind the overlay or hold up the start of the fade.
-     The bar is a single Web Animation, started with the first frame: it runs to 85% over the first 1s on a gentle
-     ease-out and creeps on toward 95% if the load is slower, all in one go (not a script timer starting each leg,
-     which a busy main thread held back, so the bar sat at 85%), and closes to 100% once it is done. The label waits for the web fonts (wf-active), so it never swaps typeface in view.
+     The preloader shows for at least 1s so it reads as intended; the gate gives up after 8s (the poster then stays as
+     the drone's stand-in if it failed). Smoothness: while it shows, the page's main thread is busy (three.js, the
+     model, the line work), so the only thing that moves is the bar, a single Web Animation of the fill's transform
+     started with the first frame (it runs off the main thread): to 85% over the first 1s, creeping on toward 95% if
+     the load is slower, closing to 100% once it is done. The drone underneath holds its flag and propellers until
+     the overlay is fading (window.hwPreloader.done; drone-hero.js holdUntil), so it does not redraw behind it.
      The lift is staged so the heavy work happens behind the opaque overlay, never during its fade: once loaded (and
      the 1s is up) the bar closes, and at the same moment the scroll unlocks and every scroll scene re-measures (a
-     resize; Lenis too); then, after a 350ms beat at 100%, the overlay fades out over 500ms, the hero copy fading in
+     resize; Lenis too); then, after a 350ms beat at 100%, the overlay fades out (is-done), the hero copy fading in
      beneath it and the poster crossfading into the live canvas; the hero copy deciphers (window.hwPreloader.done, which
-     the scramble embed waits on) as the fade ends. A link to an #anchor on this page is followed then. -->
+     the scramble embed waits on) as the fade ends. A link to an #anchor on this page is followed then.
+     Scrollbar: on mouse and trackpad devices (pointer: fine) the browser's own scrollbar is hidden (html.hw-scrollbar)
+     and the page's own, .scrollbar_component (a Designer element at the end of the body, styled there), shows over the
+     content while scrolling or near the right edge, so the layout never shifts when the scroll unlocks. Phones and
+     tablets keep their native overlay scrollbars. The script that drives it is in the page's footer code. -->
 <style>
-  #hw-preloader { position: fixed; inset: 0; z-index: 2147483000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2rem;
-    background: var(--_theme---background-01, #222322); color: var(--_theme---text-01, #fcfcfc); touch-action: none;
-    will-change: opacity; transition: opacity 500ms cubic-bezier(.4,0,.2,1); }
-  #hw-preloader.is-done { opacity: 0; pointer-events: none; }
-  #hw-preloader .hw-preloader_stage, #hw-preloader .hw-preloader_meta { animation: hw-preloader-in 500ms cubic-bezier(.2,.7,.2,1) both; }
-  #hw-preloader .hw-preloader_meta { animation-delay: 80ms; }
-  @keyframes hw-preloader-in { from { opacity: 0; transform: translateY(0.5rem); } }
-  .hw-preloader_stage { display: block; width: 4.5rem; }
-  .hw-preloader_mark { display: block; width: 100%; height: auto; overflow: visible; }
-  .hw-preloader_mark path { fill: none; stroke: currentColor; stroke-width: 1.25px; vector-effect: non-scaling-stroke; stroke-linejoin: miter; }
-  .hw-preloader_meta { display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
-    font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; font-weight: 500; line-height: 1; letter-spacing: 0.1em; text-transform: uppercase; }
-  .hw-preloader_label { color: var(--_theme---text-03, #a2a2a2); transition: opacity 250ms ease; }
-  html:not(.wf-active):not(.wf-inactive) .hw-preloader_label { opacity: 0; }
-  .hw-preloader_bar { width: 9rem; height: 1px; overflow: hidden; background: var(--_theme---border-01, #313231); }
-  .hw-preloader_fill { height: 100%; background: currentColor; transform: scaleX(0); transform-origin: 0 50%; will-change: transform; }
+  html.hw-preloader [data-hw-preloader] { display: flex; }
+  [data-hw-preloader-label] { transition: opacity 250ms ease; }
+  html:not(.wf-active):not(.wf-inactive) [data-hw-preloader-label] { opacity: 0; }
+  html.hw-scrollbar { scrollbar-width: none; }
+  html.hw-scrollbar::-webkit-scrollbar, html.hw-scrollbar body::-webkit-scrollbar { display: none; }
   html.hw-preloading, html.hw-preloading body { overflow: hidden; }
   /* while the gate is up the hero copy waits, so it arrives with the drone; the poster under it is in the drone embed */
   .hero_copy { transition: opacity 400ms ease; }
@@ -65,18 +59,15 @@
   .hw-drone-poster img { position: absolute; display: block; height: auto; max-width: none; top: 93%; left: 3.368%; width: 93.264%; margin-top: -8.724%; }
   .hw-drone-poster img.is-narrow { left: 0; width: 100%; margin-top: -14.934%; }
   html.hw-drone-live .hw-drone-poster { opacity: 0; }
-  @media (prefers-reduced-motion: reduce) {
-    #hw-preloader .hw-preloader_stage, #hw-preloader .hw-preloader_meta { animation: none; }
-    #hw-preloader { transition: opacity 300ms ease; }
-  }
 </style>
 <script>
 (function () {
   'use strict';
-  var MIN = 1000, MAX = 8000, CLOSE = 350, FADE = 500;
+  var MIN = 1000, MAX = 8000, CLOSE = 350;
   var root = document.documentElement, t0 = Date.now();
   var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var resolveDone, done = new Promise(function (r) { resolveDone = r; });
+  if (window.matchMedia && window.matchMedia('(pointer: fine)').matches) root.classList.add('hw-scrollbar');   // the page's own scrollbar (footer code)
 
   /* every load starts at the top, whatever the browser remembers; a #anchor is followed once the gate lifts */
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
@@ -85,43 +76,41 @@
   window.scrollTo(0, 0);
 
   var api = window.hwPreloader = { done: done, report: function () {}, track: function (n, p) { return p; }, drone: function () {} };
-  root.classList.add('hw-preloading', 'hw-gate');
+  root.classList.add('hw-preloading', 'hw-gate', 'hw-preloader');
   var block = function (e) { e.preventDefault(); };
   document.addEventListener('touchmove', block, { passive: false });   // iOS can still scroll an overflow:hidden page by touch
   document.addEventListener('wheel', block, { passive: false });
 
-  /* ---- the overlay: the mark, still, over the label and the bar ---- */
-  var MARK = '<svg class="hw-preloader_mark" viewBox="-1 -1 83 84" aria-hidden="true"><path d="' +
-    'M46.5 0H28.66V8.5H36.07V36.82H44.58V8.5H48L51.98 11.83V4.59L46.51 0H46.5Z' +
-    'M76.37 2.34H71.7L51.96 18.87V64.21L60.46 71.32V22.82L67.86 16.64V64.9L76.36 57.75V9.19L80.61 5.9L76.36 2.34H76.37Z' +
-    'M0 5.9L4.25 9.19V57.74L12.75 64.89V16.63L20.15 22.81V71.3L28.65 64.19V18.87L8.92 2.34H4.25L0 5.9Z' +
-    'M44.57 44.23H36.06V67.65L26.04 76.04L31.97 80.97H48.65L54.58 76.04L44.56 67.67V44.24L44.57 44.23Z' +
-    '"/></svg>';
-  var el = document.createElement('div');
-  el.setAttribute('role', 'progressbar'); el.setAttribute('aria-label', 'Loading'); el.setAttribute('aria-busy', 'true');
-  el.id = 'hw-preloader';
-  el.innerHTML = '<div class="hw-preloader_stage">' + MARK + '</div>' +
-    '<div class="hw-preloader_meta"><span class="hw-preloader_label">Loading</span>' +
-    '<div class="hw-preloader_bar"><div class="hw-preloader_fill"></div></div></div>';
-  root.appendChild(el);
-  var fill = el.querySelector('.hw-preloader_fill');
-
-  /* ---- the bar: Web Animations of transform only (they run off the main thread, from the first frame) ---- */
-  var run = null;
-  function scaleNow() { var m = /matrix\(([^,]+)/.exec(getComputedStyle(fill).transform || ''); return m ? +m[1] : 0; }
+  /* ---- the overlay is the Designer element; the bar starts as soon as it is parsed (the first frame) ---- */
+  var el = null, fill = null, run = null;
+  function grab() {
+    if (el) return true;
+    el = document.querySelector('[data-hw-preloader]'); if (!el) return false;
+    fill = el.querySelector('[data-hw-preloader-fill]');
+    if (fill && !unlocked) {
+      fill.style.transform = 'scaleX(0.95)';
+      if (!reduced && fill.animate) {
+        /* one animation: to 85% over the first 1s on a gentle ease-out, then on toward 95% by the 8s failsafe for a slow
+           load, so it never waits on the busy main thread to start its next leg; it is timed from the page's start */
+        run = fill.animate([
+          { transform: 'scaleX(0)', easing: 'cubic-bezier(.25,.6,.3,1)' },
+          { transform: 'scaleX(0.85)', offset: MIN / MAX, easing: 'linear' },
+          { transform: 'scaleX(0.95)' }], { duration: MAX });
+        run.currentTime = Math.min(MAX - 1, Date.now() - t0);
+      }
+    }
+    return true;
+  }
+  (function poll() { if (!grab() && document.readyState === 'loading') requestAnimationFrame(poll); })();
+  function scaleNow() { var m = fill && /matrix\(([^,]+)/.exec(getComputedStyle(fill).transform || ''); return m ? +m[1] : 0; }
   function bar(to, ms, ease) {
-    var from = scaleNow(); if (run) run.cancel();
+    if (!fill) return; var from = scaleNow(); if (run) run.cancel();
     fill.style.transform = 'scaleX(' + to + ')';                          // where it rests once the move is over
     if (reduced || !fill.animate) return;
     run = fill.animate([{ transform: 'scaleX(' + from + ')' }, { transform: 'scaleX(' + to + ')' }], { duration: ms, easing: ease });
   }
-  /* one animation from the first frame: to 85% over the first 1s on a gentle ease-out, then on toward 95% by the 8s
-     failsafe for a slow load, so it never waits on the busy main thread to start its next leg */
-  fill.style.transform = 'scaleX(0.95)';
-  if (!reduced && fill.animate) run = fill.animate([
-    { transform: 'scaleX(0)', easing: 'cubic-bezier(.25,.6,.3,1)' },
-    { transform: 'scaleX(0.85)', offset: MIN / MAX, easing: 'linear' },
-    { transform: 'scaleX(0.95)' }], { duration: MAX });   // a slow load: it keeps moving, toward 95%
+  /* the fade's length is the one set on .preloader_component in the Designer (its opacity transition) */
+  function fadeMs() { if (!el) return 0; var d = getComputedStyle(el).transitionDuration.split(',')[0] || '0s'; return parseFloat(d) * (/ms$/.test(d) ? 1 : 1000) || 0; }
 
   /* ---- what the gate waits for: named promises (the fonts, the first screen's images, the drone) ---- */
   var pending = {}, closed = false, finished = false, droneOk = true;
@@ -133,6 +122,7 @@
 
   /* the images in the first screen, once the DOM is in; the embeds have registered by then */
   function onDom() {
+    grab();
     if (!hash) window.scrollTo(0, 0);
     var left = [].filter.call(document.images, function (i) { var r = i.getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0 && r.width > 0 && !i.complete; });
     api.track('images', new Promise(function (res) {
@@ -154,25 +144,26 @@
   /* 1) the bar closes, and behind the still-opaque overlay the page unlocks and every scroll scene re-measures */
   var unlocked = false, lifted = false;
   function close() {
-    if (unlocked) return; unlocked = true; clearTimeout(failsafe);
+    if (unlocked) return; unlocked = true; clearTimeout(failsafe); grab();
     bar(1, CLOSE - 50, 'cubic-bezier(.4,0,.2,1)');
     if (!hash) window.scrollTo(0, 0);
     root.classList.remove('hw-preloading');
     try { if (typeof lenis !== 'undefined') { if (lenis.resize) lenis.resize(); if (lenis.start) lenis.start(); } } catch (e) {}
     window.dispatchEvent(new Event('resize'));
-    setTimeout(lift, reduced ? 0 : CLOSE);
+    setTimeout(lift, reduced || !el ? 0 : CLOSE);
   }
-  /* 2) the overlay fades; the hero copy fades in beneath it and deciphers as the fade ends */
+  /* 2) the overlay fades (is-done); the hero copy fades in beneath it and deciphers as the fade ends */
   function lift() {
     if (lifted) return; lifted = true;
     document.removeEventListener('touchmove', block); document.removeEventListener('wheel', block);
     requestAnimationFrame(function () {
       if (droneOk) root.classList.add('hw-drone-live');   // the poster fades into the live canvas (a failed drone keeps its poster)
       root.classList.remove('hw-gate');
-      el.removeAttribute('aria-busy'); el.classList.add('is-done');
-      var fade = reduced ? 300 : FADE;
-      setTimeout(resolveDone, fade - 150);
+      var fade = fadeMs();
+      if (el) { el.removeAttribute('aria-busy'); el.classList.add('is-done'); }
+      setTimeout(resolveDone, Math.max(0, fade - 150));
       setTimeout(function () {
+        root.classList.remove('hw-preloader');
         if (el && el.parentNode) el.parentNode.removeChild(el); el = null;
         if (droneOk) { var p = document.querySelector('.hw-drone-poster'); if (p && p.parentNode) p.parentNode.removeChild(p); }
       }, fade + 50);

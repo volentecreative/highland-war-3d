@@ -102,4 +102,40 @@
   var ready = window.hwPreloader && window.hwPreloader.done ? window.hwPreloader.done : Promise.resolve();
   ready.then(function () { setTimeout(show, AT); });
 })();
+
+/* The page's own scrollbar (.scrollbar_component with its .scrollbar_thumb, at the end of the body, styled in the
+   Designer: invisible by default, is-active shows it). On mouse and trackpad devices the browser's scrollbar is hidden
+   (html.hw-scrollbar, head code), so nothing shifts when the scroll locks and unlocks; this one floats over the content
+   and shows while the page scrolls or the pointer is near the right edge, fading out a second after. Its thumb follows
+   the scroll (height and position written here, as a transform) and can be dragged. Phones and tablets keep their
+   native overlay scrollbars: there, and if the element is missing, it is removed and the native one stays. */
+(function () {
+  var root = document.documentElement, sb = document.querySelector('[data-hw-scrollbar]'), th = sb && sb.querySelector('[data-hw-scrollbar-thumb]');
+  if (!sb || !th || !root.classList.contains('hw-scrollbar')) { root.classList.remove('hw-scrollbar'); if (sb && sb.parentNode) sb.parentNode.removeChild(sb); return; }
+  var EDGE = 24, HOLD = 1000, MINH = 32, hideT = 0, near = false, drag = null, raf = 0, m = null;
+  function measure() {
+    var vh = window.innerHeight, sh = Math.max(root.scrollHeight, document.body.scrollHeight), track = sb.clientHeight;
+    m = { max: Math.max(0, sh - vh), track: track, h: Math.max(MINH, Math.round(track * vh / Math.max(1, sh))) };
+    sb.style.display = m.max > 1 ? '' : 'none'; th.style.height = m.h + 'px';
+  }
+  function place() { raf = 0; if (!m) measure(); var y = m.max ? (window.scrollY / m.max) * (m.track - m.h) : 0; th.style.transform = 'translateY(' + Math.max(0, Math.min(m.track - m.h, y)).toFixed(1) + 'px)'; }
+  function queue() { if (!raf) raf = requestAnimationFrame(place); }
+  function show() { sb.classList.add('is-active'); clearTimeout(hideT); if (!drag && !near) hideT = setTimeout(function () { sb.classList.remove('is-active'); }, HOLD); }
+  window.addEventListener('scroll', function () { queue(); show(); }, { passive: true });
+  window.addEventListener('resize', function () { measure(); queue(); });
+  if (window.ResizeObserver) new ResizeObserver(function () { measure(); queue(); }).observe(document.body);   // the page grows as embeds load
+  document.addEventListener('mousemove', function (e) { var n = e.clientX >= window.innerWidth - EDGE; if (n !== near) { near = n; show(); } }, { passive: true });
+  document.addEventListener('mouseleave', function () { near = false; show(); });
+  th.addEventListener('pointerdown', function (e) {
+    if (e.button !== 0) return; e.preventDefault(); measure();
+    drag = { y: e.clientY, s: window.scrollY, k: m.max / Math.max(1, m.track - m.h) }; th.setPointerCapture(e.pointerId); show();
+  });
+  th.addEventListener('pointermove', function (e) {
+    if (!drag) return; var to = Math.max(0, Math.min(m.max, drag.s + (e.clientY - drag.y) * drag.k));
+    try { if (typeof lenis !== 'undefined' && lenis.scrollTo) lenis.scrollTo(to, { immediate: true }); else window.scrollTo(0, to); } catch (err) { window.scrollTo(0, to); }
+  });
+  function end() { if (!drag) return; drag = null; show(); }
+  th.addEventListener('pointerup', end); th.addEventListener('pointercancel', end);
+  measure(); place();
+})();
 </script>
