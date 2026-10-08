@@ -78,29 +78,31 @@
 })();
 
 /* The scroll prompt (.hero_scroll, under the hero copy's Contact button, styled in the Designer: hidden by default, is-shown fades
-   and lifts it in): for visitors who have not started scrolling, it appears 3.5s after the page is ready (after the
-   load gate lifts) if the page is still at the top, and its chevron bobs gently (a Web Animations loop, transform
-   only); the first scroll fades it away for good. With reduced motion it appears without the bob. */
+   and lifts it in): it appears whenever the page has been still for 3.5s while the prompt is on screen - first 3.5s
+   after the page is ready (after the load gate lifts), then again each time the visitor stops scrolling - and any
+   scroll fades it away until the next pause. Its chevron bobs gently while it shows (a Web Animations loop, transform
+   only); with reduced motion it appears without the bob. */
 (function () {
   var el = document.querySelector('[data-hero-scroll]');
   if (!el) return;
-  var icon = el.querySelector('.hero_scroll-icon'), anim = null, gone = false, AT = 3500, TOP = 24;
+  var icon = el.querySelector('.hero_scroll-icon'), anim = null, shown = false, ready = false, idleT = 0, stopT = 0, AT = 3500;
   var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  function hide() {
-    if (gone || window.scrollY < TOP) return; gone = true;
-    window.removeEventListener('scroll', hide);
-    el.classList.remove('is-shown');
-    if (anim) setTimeout(function () { anim.cancel(); }, 700);
-  }
+  function onScreen() { var r = el.getBoundingClientRect(); return r.bottom > 0 && r.top < window.innerHeight; }
   function show() {
-    if (gone || window.scrollY >= TOP) { gone = true; return; }
+    if (shown || !onScreen()) return; shown = true; clearTimeout(stopT);
     el.classList.add('is-shown');
-    if (!reduced && icon && icon.animate)
+    if (!anim && !reduced && icon && icon.animate)
       anim = icon.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(0.3rem)' }], { duration: 900, iterations: Infinity, direction: 'alternate', easing: 'ease-in-out' });
   }
-  window.addEventListener('scroll', hide, { passive: true });
-  var ready = window.hwPreloader && window.hwPreloader.done ? window.hwPreloader.done : Promise.resolve();
-  ready.then(function () { setTimeout(show, AT); });
+  function hide() {
+    if (!shown) return; shown = false;
+    el.classList.remove('is-shown');
+    stopT = setTimeout(function () { if (anim) { anim.cancel(); anim = null; } }, 700);   // the bob stops once it has faded
+  }
+  function wait() { clearTimeout(idleT); if (ready) idleT = setTimeout(show, AT); }
+  window.addEventListener('scroll', function () { hide(); wait(); }, { passive: true });
+  var gate = window.hwPreloader && window.hwPreloader.done ? window.hwPreloader.done : Promise.resolve();
+  gate.then(function () { ready = true; wait(); });
 })();
 
 /* The page's own scrollbar (.scrollbar_component with its .scrollbar_thumb, at the end of the body, styled in the
