@@ -40,7 +40,8 @@
     intro: null,               // the drone flies into its opening place: { at: a promise to start on (e.g. a page's preloader lifting), delay: ms after it, duration: ms,
                                // rise: how far below it starts and back: how far behind (in the drone's radius), spin: the propellers' extra turns per second at
                                // the start, easing to nothing as it lands, onDone: called once it has landed }. Until it starts the drone waits at the start
-                               // (out of frame below). Reduced motion: no flight, onDone at once
+                               // (out of frame below). flagIn: ms the flag takes to fade in once the drone has landed (it is hidden until then; 0 = shown
+                               // throughout). Reduced motion: no flight, onDone at once
     holdUntil: null,           // a promise (e.g. a page's preloader lifting): until it settles the drone draws only when something changes (its first frame, a resize, a scroll), not the flag's wave or the idle propellers, so it leaves the frame time to the load while it is covered
     onProgress: null,          // function({ loaded, total, scripts, built }): called as the model's bytes, three.js and the loader come in and once the drone is built (total 0 = the size is not known), for a page's preloader
     focus: 'FL',               // which motor the path ends on: FR, FL, BR, BL, or with ' 2' for the lower ring of the coaxial pairs
@@ -404,6 +405,7 @@
     const pivotHome = pivot.position.clone(), introOff = new THREE.Vector3(), introFwd = new THREE.Vector3();   // the intro's flight moves the pivot from here (see place)
     // the intro: introK 1 (at the start, out of frame) to 0 (landed), on an ease-out, the propellers' boost fading with it
     const INTRO = CONFIG.intro || {}; let introK = CONFIG.intro && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0, introT0 = null, introBoost = 0;
+    let flagK = introK > 0 && +INTRO.flagIn > 0 ? 0 : 1, flagT0 = null;   // the flag's fade-in after the landing (flagIn)
     // the model's own propellers turn about their hubs: each part's geometry is moved so the hub's axis is its origin, and the mesh put back there
     for (const { m, pos } of modelProps) { const hb = hubs[pos] || propInfo[pos]; if (!hb) continue; const c = new THREE.Vector3(); hb.getCenter(c);
       m.geometry.translate(-c.x, 0, -c.z); m.geometry.computeBoundingBox(); m.geometry.computeBoundingSphere(); m.position.set(c.x, 0, c.z);
@@ -746,7 +748,7 @@
         introOff.copy(introFwd).multiplyScalar(introK * droneR * (INTRO.back == null ? 3 : +INTRO.back)); introOff.y -= introK * droneR * (INTRO.rise == null ? 1.6 : +INTRO.rise);
         pivot.position.add(introOff); pivot.updateMatrixWorld(true); }
       fadeGrid(); motorColor(e);
-      if (flag) { const w = CONFIG.flagFade, f = Array.isArray(w) && w.length === 2 && w[1] > w[0] ? 1 - Math.min(1, Math.max(0, (e - w[0]) / (w[1] - w[0]))) : 1; flag.mat.uniforms.uOpacity.value = (+CONFIG.flagOpacity || 0.85) * f; edgeMat.uniforms.uFlagA.value = f;
+      if (flag) { const w = CONFIG.flagFade, f = (Array.isArray(w) && w.length === 2 && w[1] > w[0] ? 1 - Math.min(1, Math.max(0, (e - w[0]) / (w[1] - w[0]))) : 1) * flagK; flag.mat.uniforms.uOpacity.value = (+CONFIG.flagOpacity || 0.85) * f; edgeMat.uniforms.uFlagA.value = f;
         const show = f > 0.001; if (show !== flag.shown) { flag.shown = show; for (const o of flag.objects) o.visible = show; } }   // faded out: its cloth and lines leave the scene until it fades back
       if (rows === null && inspect) rows = rowEls();
       const s = stepped ? steppedAt() : useInsp && q > 0 ? inspectAt(q) : null;
@@ -916,7 +918,8 @@
       if (introT0 != null && introK > 0) {
         const u = Math.min(1, (now - introT0) / Math.max(1, +INTRO.duration || 1800)), r = 1 - u;
         introK = r * r * r * r; introBoost = (+INTRO.spin || 0) * r * r; shownPos = -1;   // a quartic ease-out: it slows into its place
-        if (u >= 1) { introK = 0; introBoost = 0; introT0 = null; introDone(); } }
+        if (u >= 1) { introK = 0; introBoost = 0; introT0 = null; if (flagK < 1) flagT0 = now; introDone(); } }
+      if (flagT0 != null) { const v = Math.min(1, (now - flagT0) / Math.max(1, +INTRO.flagIn)); flagK = v * v * (3 - 2 * v); shownPos = -1; if (v >= 1) { flagK = 1; flagT0 = null; } }   // the flag fades in
       if (visible && curPos() !== shownPos) place();
       if (!reduced && visible && !held) {
         if (CONFIG.propSeconds > 0 && (!stepped || liveApproach)) { idle += dt * Math.PI * 2 / CONFIG.propSeconds; if (droneOn) dirty = true; }   // stepped, the idle turn stops with the approach, so the docked canvas rests   // the propellers go with the rest of the drone: once it has gone there is nothing turning to draw
@@ -930,7 +933,7 @@
       if (colorTw) stepColors(now);
       if (dirty && visible && now - lastRender >= frameMs - 2) { dirty = false; lastRender = now; if (seqUsable()) drawSeq(); else { seqHide(); render(); } }
       inTick = false;
-      const more = introT0 != null || colorTw || tw || orbiting() || orbReturning() || (SC && scT0 != null && visible && !reduced && (pos < 2 || +SC.orbitSeconds > 0)) || (stepped && (follow() || scrubbed()) && sq !== fq) || (visible && (posTarget !== pos || dirty || (!reduced && !held && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
+      const more = introT0 != null || flagT0 != null || colorTw || tw || orbiting() || orbReturning() || (SC && scT0 != null && visible && !reduced && (pos < 2 || +SC.orbitSeconds > 0)) || (stepped && (follow() || scrubbed()) && sq !== fq) || (visible && (posTarget !== pos || dirty || (!reduced && !held && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
       if (more) wake();
     }
     wake();
@@ -996,5 +999,5 @@
       .then(([, buf]) => new Promise((res, rej) => { const ld = new global.THREE.GLTFLoader(); if (global.MeshoptDecoder) ld.setMeshoptDecoder(global.MeshoptDecoder); ld.parse(buf, url.replace(/[^/]*$/, ''), res, rej); }))
       .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.35.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.36.0' };
 })(typeof window !== 'undefined' ? window : this);
