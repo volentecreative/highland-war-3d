@@ -37,6 +37,7 @@
     model: '',                 // URL of the GLB; '' = heavy_lift_drone_model.glb beside this script
     loader: 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js',
     meshopt: 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/meshopt_decoder.js',   // the decoder for a meshopt-compressed model (EXT_meshopt_compression, as heavy_lift_drone_model.glb is); fetched alongside three.js. '' = none (an uncompressed model)
+    holdUntil: null,           // a promise (e.g. a page's preloader lifting): until it settles the drone draws only when something changes (its first frame, a resize, a scroll), not the flag's wave or the idle propellers, so it leaves the frame time to the load while it is covered
     onProgress: null,          // function({ loaded, total, scripts, built }): called as the model's bytes, three.js and the loader come in and once the drone is built (total 0 = the size is not known), for a page's preloader
     focus: 'FL',               // which motor the path ends on: FR, FL, BR, BL, or with ' 2' for the lower ring of the coaxial pairs
     track: '',                 // the tall section the canvas is pinned inside ('closest:.section_hero', a selector, or an element); the camera's path runs over its scroll. '' = hold the end view
@@ -855,6 +856,8 @@
     let seqStarted = false;
     if (SQ && isNarrow()) Promise.resolve(SQ.after).catch(() => {}).then(() => { const go = () => { seqStarted = true; seqLoad(seqTheme()); }; if (global.requestIdleCallback) requestIdleCallback(go, { timeout: 3000 }); else setTimeout(go, 200); });
     // ---- the loop: the camera follows the scroll through the track, damped; the props turn with the scroll
+    let held = !!CONFIG.holdUntil;
+    if (held) Promise.resolve(CONFIG.holdUntil).catch(() => {}).then(() => { held = false; dirty = true; wake(); });
     let dirty = true, alive = true, visible = true, lastT = performance.now(), spin = 0, spinTarget = 0, idle = 0, flagT = 0, flagLast = 0, raf = 0, inTick = false;
     // frames are asked for only while something moves: a scroll to follow, a state's move, the dock, the props or the flag; at rest there is no loop at all
     const wake = () => { if (raf || !alive) return; if (!inTick) lastT = performance.now(); raf = requestAnimationFrame(tick); };
@@ -898,7 +901,7 @@
       }
       if (visible && posTarget !== pos) { pos = reduced ? posTarget : pos + (posTarget - pos) * Math.min(1, (+CONFIG.damping || 0.12) * dt * 60); if (Math.abs(posTarget - pos) < 1e-5) pos = posTarget; progress = Math.min(1, pos); insp = stepped ? sq : Math.max(0, pos - 1); }
       if (visible && curPos() !== shownPos) place();
-      if (!reduced && visible) {
+      if (!reduced && visible && !held) {
         if (CONFIG.propSeconds > 0 && (!stepped || liveApproach)) { idle += dt * Math.PI * 2 / CONFIG.propSeconds; if (droneOn) dirty = true; }   // stepped, the idle turn stops with the approach, so the docked canvas rests   // the propellers go with the rest of the drone: once it has gone there is nothing turning to draw
         if (Math.abs(spinTarget - spin) > 1e-4) { spin += (spinTarget - spin) * Math.min(1, dt * 6); if (Math.abs(spinTarget - spin) < 1e-4) spin = spinTarget; dirty = true; }
         for (const p of props) p.mesh.rotation.y = p.dir * (spin + idle) + p.phase;
@@ -909,7 +912,7 @@
       if (colorTw) stepColors(now);
       if (dirty && visible && now - lastRender >= frameMs - 2) { dirty = false; lastRender = now; if (seqUsable()) drawSeq(); else { seqHide(); render(); } }
       inTick = false;
-      const more = colorTw || tw || orbiting() || orbReturning() || (SC && scT0 != null && visible && !reduced && (pos < 2 || +SC.orbitSeconds > 0)) || (stepped && (follow() || scrubbed()) && sq !== fq) || (visible && (posTarget !== pos || dirty || (!reduced && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
+      const more = colorTw || tw || orbiting() || orbReturning() || (SC && scT0 != null && visible && !reduced && (pos < 2 || +SC.orbitSeconds > 0)) || (stepped && (follow() || scrubbed()) && sq !== fq) || (visible && (posTarget !== pos || dirty || (!reduced && !held && ((CONFIG.propSeconds > 0 && droneOn && (!stepped || liveApproach)) || Math.abs(spinTarget - spin) > 1e-4 || (flag && flag.shown)))));
       if (more) wake();
     }
     wake();
@@ -975,5 +978,5 @@
       .then(([, buf]) => new Promise((res, rej) => { const ld = new global.THREE.GLTFLoader(); if (global.MeshoptDecoder) ld.setMeshoptDecoder(global.MeshoptDecoder); ld.parse(buf, url.replace(/[^/]*$/, ''), res, rej); }))
       .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.33.1' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.34.0' };
 })(typeof window !== 'undefined' ? window : this);
