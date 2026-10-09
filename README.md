@@ -530,7 +530,7 @@ are pasted into Webflow by hand (or through the Webflow API); Webflow holds the 
 - `embed-hero-drone.html`: the Embed in `.hero-drone_canvas` (drone-hero.js, with `onProgress` wired to the preloader).
 - `embed-scramble.html`: the Embed at the end of the page (scramble.js 2.5, whose runs wait for the preloader).
 
-- `contact-footer.html`: Page settings, custom code, footer, on `contact`: opens the contact modal on arrival.
+- `contact-head.html`: Page settings, custom code, head, on `contact`: redirects `/contact` to `/?modal=contact`.
 - `narthex-lenis-pause.js`: the registered inline script `narthexLenisPause` (Site settings, footer): Lenis stops
   while a narthex menu or modal is open, tracked by name so a repeated open can never leave it stopped.
 - `form-check.js` (repo root): the contact form's validation and Turnstile, loaded site-wide (below).
@@ -545,9 +545,11 @@ dim): it slides all the way up from the bottom on phones and rises a little else
 breakpoint is narthex's `swipe-media`, set to `(max-width: 767px)` in Site settings, head, before narthex loads. A
 centred dialog from 768px up, and full screen with no gutter or border below that (never a bottom sheet). Its close button is the
 first thing in the scrolling panel and `position: sticky`, so it stays in the top corner however far the form scrolls.
-Every Contact button (the navbar's two, the footer's links, the Contact page's, the splash's and Home Draft Copy's)
-carries `vci-modal="open" vci-modal-key="contact"` and opens the modal on the page it is on; each keeps its href
-(`/contact`, or the splash's mailto) as the fallback without JavaScript. `?modal=contact` opens it on load.
+Every Contact button and link (the navbar's two, the footer's, Home Draft's Contact and Request Spec Sheet buttons,
+Home Draft Copy's, the splash's, and the contact links in the Privacy Policy and Terms of Use) carries
+`vci-modal="open" vci-modal-key="contact"` and opens the modal on the page it is on. Each links to `/?modal=contact`
+(Webflow cannot store a bare `?modal=contact`), which is where it goes without JavaScript or in a new tab;
+`?modal=contact` on any page opens the modal on load. `/contact` itself redirects there.
 `data-lenis-prevent` on the host lets the wheel scroll the dialog while Lenis is stopped.
 
 The form inside is the original Contact form (moved, not rebuilt). Its validation and Turnstile are this repo's

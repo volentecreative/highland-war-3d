@@ -1,0 +1,5 @@
+<!-- /contact redirects to the home page with the contact modal open (/?modal=contact). This runs first thing in
+     <head>, before the page paints; replace() so the back button skips /contact. A server-side 301 is better once
+     this page is deleted: Site settings > Publishing > 301 redirects, /contact -> /?modal=contact. -->
+<meta name="robots" content="noindex">
+<script>location.replace('/?modal=contact');</script>
