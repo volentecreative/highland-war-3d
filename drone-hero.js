@@ -156,6 +156,8 @@
     easeOut: null,             // of the section's scroll: over this much before its end the camera's progress is eased out (its speed falling smoothly to nothing at the end, on top of the curve's own flat end), so the last stage comes to rest softly; null = the last pose's window; 0 = none
     rows: '[data-inspect]',    // the feature rows, numbered 1.. in that attribute; the active one gets `activeClass`
     activeClass: 'is-active',
+    tail: 0,                   // viewports of the end section's scroll held after the last pose is reached (the last window ends that far before the
+                               // section's end), so the end is a rest rather than the edge; the windows are spread over the rest of the scroll
     click: false,              // true: clicking a row scrolls the page (smoothly) to that row's window, so the camera settles on its pose
     reachEvent: 'drone:reach',     // dispatched (bubbling) on a row as the scroll reaches its window, and…
     unreachEvent: 'drone:unreach', // … on the way back up past its start; '' = none. The page's own scripts can start things on them
@@ -532,7 +534,9 @@
       if (endEl) { const er = endEl.getBoundingClientRect(), hr = host.getBoundingClientRect(); return Math.min(1, Math.max(0, 1 - (er.top - hr.top) / Math.max(1, er.top - r.top))); }   // done when the end element reaches the canvas's top
       const run = Math.max(1, r.height - h); return Math.min(1, Math.max(0, -r.top / run)); };
     // the inspection's progress: how far the end section has scrolled past the canvas's top, over its extra height
-    const readInspect = () => { if (!inspect || !endEl) return 0; const er = endEl.getBoundingClientRect(), hr = host.getBoundingClientRect(); return Math.min(1, Math.max(0, (hr.top - er.top) / Math.max(1, er.height - hr.height))); };
+    // (tail: viewports of that scroll held after the last pose, so the section's end is a rest and not the edge)
+    const inspectRun = (er, hr) => Math.max(1, er.height - hr.height - Math.max(0, +inspect.tail || 0) * (global.innerHeight || hr.height));
+    const readInspect = () => { if (!inspect || !endEl) return 0; const er = endEl.getBoundingClientRect(), hr = host.getBoundingClientRect(); return Math.min(1, Math.max(0, (hr.top - er.top) / inspectRun(er, hr))); };
     // a CSS custom property on the host and the track, in steps of 0.001 and only when it changes: each write invalidates the track's
     // styles, and on phones a style change round a sticky element can make it re-sync mid-scroll — so not up to `breakpoint`
     // (a caller can pass narrowToo to write one anyway, in steps of 0.02)
@@ -577,7 +581,7 @@
     // scroll the page to the middle of a row's window (where the camera passes through its pose)
     function scrollToRow(n) { if (stepped) { const r = rows && rows.find(x => x.n === n); if (r) global.scrollTo({ top: Math.round((global.scrollY || 0) + r.el.getBoundingClientRect().top - (global.innerHeight || 0) * ((+inspect.line || 0.68) - 0.06)), behavior: reduced ? 'auto' : 'smooth' }); return; }
       const w = inspect.windows[n - 1]; if (!w || !endEl) return; const q = (w[0] + w[1]) / 2, er = endEl.getBoundingClientRect(), hr = host.getBoundingClientRect();
-      global.scrollTo({ top: Math.round((global.scrollY || 0) + er.top - hr.top + q * Math.max(0, er.height - hr.height)), behavior: 'smooth' }); }
+      global.scrollTo({ top: Math.round((global.scrollY || 0) + er.top - hr.top + q * inspectRun(er, hr)), behavior: 'smooth' }); }
     let rows = null, activeRow = -1;
     // ---- stepped: the inspection as discrete states (0 = the arrival, k = pose k), each one tweened to when its row
     // crosses the line; the approach before it stays on the scroll. Nothing here runs per scroll event or per frame at rest
@@ -1006,5 +1010,5 @@
       .then(([, buf]) => new Promise((res, rej) => { const ld = new global.THREE.GLTFLoader(); if (global.MeshoptDecoder) ld.setMeshoptDecoder(global.MeshoptDecoder); ld.parse(buf, url.replace(/[^/]*$/, ''), res, rej); }))
       .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.37.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.38.0' };
 })(typeof window !== 'undefined' ? window : this);

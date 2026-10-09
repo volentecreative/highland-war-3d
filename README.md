@@ -399,7 +399,8 @@ narrow and the copy sits below the motor. Zoom is a share of the frame's height;
 motor's width may fill at most that share of the room either side of its point (`point.x`), so on a narrow or tall
 frame (a small desktop window: the left half is then tall and thin) the camera backs off until the whole motor fits,
 at the arrival and every pose (3.37). Each pose has a window of that scroll (`windows`; the first window's start is the end
-of the intro) in which its feature row is active (`[data-inspect="1"]`.. rows get `is-active`, each row gets
+of the intro; with `inspect.tail`, in viewports, the windows end that far before the section does, so the last pose is a
+rest rather than the edge, 3.38) in which its feature row is active (`[data-inspect="1"]`.. rows get `is-active`, each row gets
 `--inspect-fill`, 0-1 through its window, for a progress bar, and `--inspect-active`, 1 while it is the
 active one — it inherits, so a child's styles can follow it where the class can't reach — and a `drone:reach` event as the scroll reaches
 its window, `drone:unreach` on the way back up past it; with `click` a click on a row scrolls the page to its
