@@ -358,11 +358,11 @@ and step back flush when the pointer leaves. Pass `mark: { polys, width, height 
 ## drone-hero.js: the drone, on a scroll-driven camera move onto a motor
 
 The heavy-lift drone model (`heavy_lift_drone_model.glb`, in this repo: HWI's own, with the HWI-2207 motor
-shell, ~3 MB, 97k triangles; `heavy_lift_drone_model.meshopt.glb`, 372 KB, is what the hero loads) for the hero.
+shell, ~3 MB, 97k triangles; `heavy_lift_drone_model.meshopt.glb`, 380 KB, is what the hero loads) for the hero.
 The motor bells are smooth, with the HWI mark engraved on one side and a starless American flag on the other
 (`tools/engrave-bells.py` builds them from the engineer's slotted export, `git show be27eae:heavy_lift_drone_model.glb`,
-and says how to pack the result; the mark faces inspection pose 01 on the FR motor, the flag about pose 03, each a
-single setting there). It is drawn as
+and says how to pack the result; the mark, 5 units deep, faces inspection pose 01 on the FR motor and the flag is straight
+opposite, each a single setting there). It is drawn as
 lines found on screen: a first pass writes each pixel's normal, depth and part, a second draws a
 one-pixel line wherever those jump — silhouettes and creases alike, the same weight everywhere, with
 nothing behind showing through; each mesh carries its own id, so where two parts meet on screen the
@@ -395,7 +395,10 @@ keeps the curve moving: two neighbouring keys with the same value — a pose equ
 a coaxial pair — so what is drawn in the primary colour under the housing stays and is copied with it; the
 ring named is the one the framing, the ribs and the callouts are about. A pose's `zoomNarrow` is its zoom on
 screens up to `breakpoint` (the top-level `zoomNarrow` likewise for the arrival), where the frame is tall and
-narrow and the copy sits below the motor. Each pose has a window of that scroll (`windows`; the first window's start is the end
+narrow and the copy sits below the motor. Zoom is a share of the frame's height; with `zoomFit` (e.g. 0.9) the
+motor's width may fill at most that share of the room either side of its point (`point.x`), so on a narrow or tall
+frame (a small desktop window: the left half is then tall and thin) the camera backs off until the whole motor fits,
+at the arrival and every pose (3.37). Each pose has a window of that scroll (`windows`; the first window's start is the end
 of the intro) in which its feature row is active (`[data-inspect="1"]`.. rows get `is-active`, each row gets
 `--inspect-fill`, 0-1 through its window, for a progress bar, and `--inspect-active`, 1 while it is the
 active one — it inherits, so a child's styles can follow it where the class can't reach — and a `drone:reach` event as the scroll reaches
