@@ -21,9 +21,10 @@
      bottom edge). As the page scrolls the camera moves round and down to beneath the front motor on the
      camera's left, arriving with the motor shell centred in the left half exactly as the product track
      reaches the top. The motors start in the secondary colour and turn to the primary over the last part
-     of the move (primaryIn); the panel resolves over that same window. The shell is drawn as modelled,
-     with its slots (normalEdgeMotor lowers the crease threshold on the motors alone so their rounded edges
-     draw; no ribs are generated round it). Then the track's scroll runs the inspection (inspect), one
+     of the move (primaryIn); the panel resolves over that same window. The shell is drawn as modelled:
+     smooth, with the HWI mark engraved on the side pose 01 faces and a starless flag on the side pose 03 swings
+     round to (normalEdgeMotor lowers the crease threshold on the motors alone so their rounded edges draw; no
+     ribs are generated round it). Then the track's scroll runs the inspection (inspect), one
      camera curve that never comes to rest until after the last pose: the first quarter is the intro, then
      a quarter each for 01, 02 and 03, and each stage's move begins with its row's bar and ends with it (a
      pose is reached as its window ends). Over 01 everything but that motor (its bell, base, shaft, flux
@@ -103,7 +104,7 @@
     var n = matchMedia('(max-width: 991px)').matches, t = document.documentElement.classList.contains('theme-light') ? 'light' : 'dark';
     var img = document.querySelector('.hw-drone-poster img'); if (!img) return;
     img.className = n ? 'is-narrow' : 'is-wide';
-    img.src = 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@f269731/posters/drone-start-' + (n ? 'narrow' : 'wide') + '-' + t + '.webp';
+    img.src = 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@710d424/posters/drone-start-' + (n ? 'narrow' : 'wide') + '-' + t + '.webp';
   })();
 </script>
 <script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@3abcee5/drone-hero.js"></script>
@@ -114,12 +115,12 @@
   var hwNarrow = matchMedia('(max-width: 991px)').matches;
   var hwDrone = window.DroneHero ? DroneHero.mount('#hero-drone', {
     onProgress: hwPre && hwPre.drone,     // the preloader's bar follows the real load (drone-hero.js 3.20)
-    model: 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@be27eae/heavy_lift_drone_model.meshopt.glb',   // the meshopt-compressed model (342 KB; the same lines as the 2.65 MB original beside it); the library fetches three.js's meshopt decoder alongside it
+    model: 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@710d424/heavy_lift_drone_model.meshopt.glb',   // the meshopt-compressed model (372 KB; the same lines as the ~3 MB original beside it; its motor bells engraved by tools/engrave-bells.py); the library fetches three.js's meshopt decoder alongside it
     focus: 'FR',                          // the motor the path ends on. HWI's model names the arms from the pilot's seat, so FR is the front motor on the camera's left, seen from the front (FL, BR, BL for the others)
     props: 'model',                       // the model's own tri-blade propellers, turning about their hubs (rather than blades generated in their place)…
     propPhase: 60,                        // … their blades all starting at this heading (0 = a blade straight back from the opening view; the arms are turned copies in the model, so each is measured and lined up): at 60 they sweep sideways, and none points at the camera, where a blade's pitch reads as a twisted stub over the hub
     ribs: 0,                              // no ribs generated round the bell: the shell is drawn as modelled…
-    normalEdgeMotor: 0.08,                // … with its slots, whose rounded edges only draw as creases from about this threshold on the motors (the rest of the drone keeps the library's 0.25)
+    normalEdgeMotor: 0.08,                // … whose rounded edges only draw as creases from about this threshold on the motors (the rest of the drone keeps the library's 0.25)
     tilt: 8,                              // the drone pitched this many degrees nose-down about its centre at the top of the page, as if under way; it levels out over the approach and arrives flat
     floor: 2,                             // the floor grid this many motor heights below the drone's lowest point, so the low arrival view stays above it
     track: 'closest:.hero-drone_track',   // the wrapper the canvas stays pinned inside (hero + product sections)

@@ -358,7 +358,11 @@ and step back flush when the pointer leaves. Pass `mark: { polys, width, height 
 ## drone-hero.js: the drone, on a scroll-driven camera move onto a motor
 
 The heavy-lift drone model (`heavy_lift_drone_model.glb`, in this repo: HWI's own, with the HWI-2207 motor
-shell, ~2.6 MB, 95k triangles) for the hero. It is drawn as
+shell, ~3 MB, 97k triangles; `heavy_lift_drone_model.meshopt.glb`, 372 KB, is what the hero loads) for the hero.
+The motor bells are smooth, with the HWI mark engraved on one side and a starless American flag on the other
+(`tools/engrave-bells.py` builds them from the engineer's slotted export, `git show be27eae:heavy_lift_drone_model.glb`,
+and says how to pack the result; the mark faces inspection pose 01 on the FR motor, the flag about pose 03, each a
+single setting there). It is drawn as
 lines found on screen: a first pass writes each pixel's normal, depth and part, a second draws a
 one-pixel line wherever those jump — silhouettes and creases alike, the same weight everywhere, with
 nothing behind showing through; each mesh carries its own id, so where two parts meet on screen the
