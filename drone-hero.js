@@ -7,7 +7,7 @@
  *       …the copy…
  *     </div>
  *   </section>
- *   <script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@<commit>/drone-hero.js"></script>
+ *   <script src="https://cdn.jsdelivr.net/gh/volentecreative/highland-war-3d@<commit>/drone-hero.js"></script>
  *   <script>DroneHero.mount('#drone', { focus: 'FR', track: 'closest:.section_hero' });</script>
  *
  * The model (heavy_lift_drone_model.glb, beside this script) is drawn as lines found on screen: a first pass writes
@@ -68,6 +68,8 @@
     progressVar: '--drone-progress',   // a CSS custom property the eased, damped progress (0-1) is written to on the track and the host, so the page's own layout can follow the move; '' = none. Not written up to `breakpoint`
     flag: false,               // an American flag hung behind the drone, in the same line work, waving slowly as if in a light breeze; true = on
     flagWidth: 37,             // its width in the model's units (the drone spans about 7.5); height follows the 1:1.9 ratio
+    flagVertical: false,       // true: hung vertically, as in a hangar: the stripes run down, the hoist along the top, the canton at the upper left
+                               // as seen (flagWidth is then its height, along the stripes); flagBottom is still its bottom edge
     flagBottom: 2, flagZ: -22, flagX: 0,   // where its bottom edge hangs, how far back it is, and its centre's x — all from the drone's centre
     flagSway: 0.04,            // the wave's amplitude as a share of the flag's height
     flagSeconds: 16,           // roughly one wave cycle every so many seconds
@@ -156,6 +158,8 @@
     easeOut: null,             // of the section's scroll: over this much before its end the camera's progress is eased out (its speed falling smoothly to nothing at the end, on top of the curve's own flat end), so the last stage comes to rest softly; null = the last pose's window; 0 = none
     rows: '[data-inspect]',    // the feature rows, numbered 1.. in that attribute; the active one gets `activeClass`
     activeClass: 'is-active',
+    tail: 0,                   // viewports of the end section's scroll held after the last pose is reached (the last window ends that far before the
+                               // section's end), so the end is a rest rather than the edge; the windows are spread over the rest of the scroll
     click: false,              // true: clicking a row scrolls the page (smoothly) to that row's window, so the camera settles on its pose
     reachEvent: 'drone:reach',     // dispatched (bubbling) on a row as the scroll reaches its window, and…
     unreachEvent: 'drone:unreach', // … on the way back up past its start; '' = none. The page's own scripts can start things on them
@@ -459,25 +463,28 @@
     // canton and stars drawn as lines on the surface; every point is displaced each frame by a slow, soft wave
     let flag = null, flagReach = 0;   // how far the scene extends behind the drone because of the flag, for the far plane
     if (CONFIG.flag) {
-      const cA = all.getCenter(new THREE.Vector3()), W = +CONFIG.flagWidth || 37, H = W / 1.9, X0 = cA.x + (+CONFIG.flagX || 0) - W / 2, Y0 = cA.y + (+CONFIG.flagBottom || 0), Z0 = cA.z + (+CONFIG.flagZ || -22), A = H * (+CONFIG.flagSway || 0.04);   // placed about the drone's centre
+      // W x H: the flag's own (u along the stripes from the hoist, v up from the bottom stripe); CW x CH: the cloth as hung (x across, y up)
+      const V = !!CONFIG.flagVertical, cA = all.getCenter(new THREE.Vector3()), W = +CONFIG.flagWidth || 37, H = W / 1.9, CW = V ? H : W, CH = V ? W : H;
+      const X0 = cA.x + (+CONFIG.flagX || 0) - CW / 2, Y0 = cA.y + (+CONFIG.flagBottom || 0), Z0 = cA.z + (+CONFIG.flagZ || -22), A = H * (+CONFIG.flagSway || 0.04);   // placed about the drone's centre
+      const at = (u, v) => V ? [H - v, W - u] : [u, v];   // vertical: the hoist along the top, the top stripe down the left, so the canton is upper left as seen
       flagReach = Math.abs(Z0) + Math.hypot(W, H);
-      const NX = 48, NY = 26, cloth = new THREE.PlaneGeometry(W, H, NX, NY); cloth.translate(X0 + W / 2, Y0 + H / 2, Z0);
+      const NX = 48, NY = 26, cloth = new THREE.PlaneGeometry(CW, CH, V ? NY : NX, V ? NX : NY); cloth.translate(X0 + CW / 2, Y0 + CH / 2, Z0);
       const clothBase = Float32Array.from(cloth.attributes.position.array); const clothMesh = solid(cloth, false, 110); clothMesh.frustumCulled = false;   // id 110: the middle range the edge pass fades tris += cloth.index.count / 3;
-      const seg = [], uv = [];   // the lines: base points as (u, v) on the flag, u from the hoist, v from the bottom
-      const add = (u0, v0, u1, v1) => { seg.push(0, 0, 0, 0, 0, 0); uv.push(u0, v0, u1, v1); };
+      const seg = [], uv = [];   // the lines: base points on the cloth as hung (x, y), given as (u, v) on the flag, u from the hoist, v from the bottom
+      const add = (u0, v0, u1, v1) => { seg.push(0, 0, 0, 0, 0, 0); uv.push(...at(u0, v0), ...at(u1, v1)); };
       const poly = (pts, n) => { for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; for (let k = 0; k < n; k++) add(a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n, a[0] + (b[0] - a[0]) * (k + 1) / n, a[1] + (b[1] - a[1]) * (k + 1) / n); } };
       const cw = 0.76 * H, ch = 7 / 13 * H;   // the canton
       for (let i = 1; i < 13; i++) { const v = H * i / 13, u0 = v > H - ch ? cw : 0; for (let k = 0; k < NX; k++) { const a = u0 + (W - u0) * k / NX, b = u0 + (W - u0) * (k + 1) / NX; add(a, v, b, v); } }
       for (let k = 0; k < 20; k++) add(cw * k / 20, H - ch, cw * (k + 1) / 20, H - ch);   // the canton's bottom edge…
       for (let k = 0; k < 12; k++) add(cw, H - ch + ch * k / 12, cw, H - ch + ch * (k + 1) / 12);   // … and its stripe-side edge
       poly([[0, 0], [W, 0], [W, H], [0, H]], 24);   // the outer edge
-      const rs = 0.0308 * H, r2 = rs * 0.382; for (let row = 0; row < 9; row++) { const n = row % 2 ? 5 : 6; for (let col = 0; col < n; col++) {   // fifty stars, five points each
-        const cx = cw * (row % 2 ? (col + 1) / 6 : (col + 0.5) / 6) , cy = H - ch + ch * (9 - row - 0.5) / 9, pts = []; for (let k = 0; k < 10; k++) { const a = Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? r2 : rs; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); } poly(pts, 1); } }
+      const rs = 0.0308 * H, r2 = rs * 0.382; for (let row = 0; row < 9; row++) { const n = row % 2 ? 5 : 6; for (let col = 0; col < n; col++) {   // fifty stars, five points each (pointing up as hung, either way)
+        const cx = cw * (row % 2 ? (col + 1) / 6 : (col + 0.5) / 6) , cy = H - ch + ch * (9 - row - 0.5) / 9, pts = []; for (let k = 0; k < 10; k++) { const a = (V ? Math.PI : Math.PI / 2) + k * Math.PI / 5, r = k % 2 ? r2 : rs; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); } poly(pts, 1); } }
       const flagMat = lineMaterial(CONFIG.secondary, false, +CONFIG.flagOpacity || 0.85); lineMats.push(flagMat); const lines = lineMesh(seg, flagMat); scene.add(lines);
-      const wave = (u, v, t, out) => {   // the displacement of the point (u, v) at time t: fixed along the top edge, growing toward the bottom, slow crossing waves, and a lazy sideways sway
-        const hang = 1 - v / H, w = hang * hang, ph = t * Math.PI * 2 / (+CONFIG.flagSeconds || 16);
-        out[0] = A * 0.3 * Math.sin(ph * 0.37 + v / H) * hang; out[1] = 0;
-        out[2] = A * (0.62 * Math.sin(u / W * 4.2 - ph + v / H * 1.3) + 0.38 * Math.sin(u / W * 7.5 + ph * 0.61 + 1.7)) * (0.15 + 0.85 * w) * (0.55 + 0.45 * u / W);
+      const wave = (u, v, t, out) => {   // the displacement of the cloth's point (u, v) at time t: fixed along the top edge, growing toward the bottom, slow crossing waves, and a lazy sideways sway
+        const hang = 1 - v / CH, w = hang * hang, ph = t * Math.PI * 2 / (+CONFIG.flagSeconds || 16);
+        out[0] = A * 0.3 * Math.sin(ph * 0.37 + v / CH) * hang; out[1] = 0;
+        out[2] = A * (0.62 * Math.sin(u / CW * 4.2 - ph + v / CH * 1.3) + 0.38 * Math.sin(u / CW * 7.5 + ph * 0.61 + 1.7)) * (0.15 + 0.85 * w) * (0.55 + 0.45 * u / CW);
       };
       const d = [0, 0, 0];
       flag = { mat: flagMat, objects: [clothMesh, lines], shown: true, update(t) {
@@ -532,7 +539,9 @@
       if (endEl) { const er = endEl.getBoundingClientRect(), hr = host.getBoundingClientRect(); return Math.min(1, Math.max(0, 1 - (er.top - hr.top) / Math.max(1, er.top - r.top))); }   // done when the end element reaches the canvas's top
       const run = Math.max(1, r.height - h); return Math.min(1, Math.max(0, -r.top / run)); };
     // the inspection's progress: how far the end section has scrolled past the canvas's top, over its extra height
-    const readInspect = () => { if (!inspect || !endEl) return 0; const er = endEl.getBoundingClientRect(), hr = host.getBoundingClientRect(); return Math.min(1, Math.max(0, (hr.top - er.top) / Math.max(1, er.height - hr.height))); };
+    // (tail: viewports of that scroll held after the last pose, so the section's end is a rest and not the edge)
+    const inspectRun = (er, hr) => Math.max(1, er.height - hr.height - Math.max(0, +inspect.tail || 0) * (global.innerHeight || hr.height));
+    const readInspect = () => { if (!inspect || !endEl) return 0; const er = endEl.getBoundingClientRect(), hr = host.getBoundingClientRect(); return Math.min(1, Math.max(0, (hr.top - er.top) / inspectRun(er, hr))); };
     // a CSS custom property on the host and the track, in steps of 0.001 and only when it changes: each write invalidates the track's
     // styles, and on phones a style change round a sticky element can make it re-sync mid-scroll — so not up to `breakpoint`
     // (a caller can pass narrowToo to write one anyway, in steps of 0.02)
@@ -577,7 +586,7 @@
     // scroll the page to the middle of a row's window (where the camera passes through its pose)
     function scrollToRow(n) { if (stepped) { const r = rows && rows.find(x => x.n === n); if (r) global.scrollTo({ top: Math.round((global.scrollY || 0) + r.el.getBoundingClientRect().top - (global.innerHeight || 0) * ((+inspect.line || 0.68) - 0.06)), behavior: reduced ? 'auto' : 'smooth' }); return; }
       const w = inspect.windows[n - 1]; if (!w || !endEl) return; const q = (w[0] + w[1]) / 2, er = endEl.getBoundingClientRect(), hr = host.getBoundingClientRect();
-      global.scrollTo({ top: Math.round((global.scrollY || 0) + er.top - hr.top + q * Math.max(0, er.height - hr.height)), behavior: 'smooth' }); }
+      global.scrollTo({ top: Math.round((global.scrollY || 0) + er.top - hr.top + q * inspectRun(er, hr)), behavior: 'smooth' }); }
     let rows = null, activeRow = -1;
     // ---- stepped: the inspection as discrete states (0 = the arrival, k = pose k), each one tweened to when its row
     // crosses the line; the approach before it stays on the scroll. Nothing here runs per scroll event or per frame at rest
@@ -1006,5 +1015,5 @@
       .then(([, buf]) => new Promise((res, rej) => { const ld = new global.THREE.GLTFLoader(); if (global.MeshoptDecoder) ld.setMeshoptDecoder(global.MeshoptDecoder); ld.parse(buf, url.replace(/[^/]*$/, ''), res, rej); }))
       .then(gltf => { const api = build(host, CONFIG, gltf); st.built = true; tell(); return api; });
   }
-  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.37.0' };
+  global.DroneHero = { mount, defaults: DEFAULTS, version: '3.39.0' };
 })(typeof window !== 'undefined' ? window : this);

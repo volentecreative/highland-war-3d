@@ -3,7 +3,7 @@
  *
  *   <div id="flag" style="width:6rem;height:6rem"></div>
  *   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
- *   <script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@<commit>/iso-marks.js"></script>
+ *   <script src="https://cdn.jsdelivr.net/gh/volentecreative/highland-war-3d@<commit>/iso-marks.js"></script>
  *   <script>
  *     IsoMarks.flag('#flag', { hover: '.card' });          // splits into three flags on hover, closes on leave
  *     IsoMarks.conveyor('#belt', { hover: '.card' });      // every hover runs the belt one box along

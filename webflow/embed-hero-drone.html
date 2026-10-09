@@ -22,7 +22,7 @@
      camera's left, arriving with the motor shell centred in the left half exactly as the product track
      reaches the top. The motors start in the secondary colour and turn to the primary over the last part
      of the move (primaryIn); the panel resolves over that same window. The shell is drawn as modelled:
-     smooth, with the HWI mark engraved on the side pose 01 faces and a starless flag straight opposite it
+     smooth, with the HWI mark engraved facing straight ahead and a starless flag straight back
      (normalEdgeMotor lowers the crease threshold on the motors alone so their rounded edges draw; no
      ribs are generated round it). Then the track's scroll runs the inspection (inspect), one
      camera curve that never comes to rest until after the last pose: the first quarter is the intro, then
@@ -104,10 +104,10 @@
     var n = matchMedia('(max-width: 991px)').matches, t = document.documentElement.classList.contains('theme-light') ? 'light' : 'dark';
     var img = document.querySelector('.hw-drone-poster img'); if (!img) return;
     img.className = n ? 'is-narrow' : 'is-wide';
-    img.src = 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@854f840/posters/drone-start-' + (n ? 'narrow' : 'wide') + '-' + t + '.webp';
+    img.src = 'https://cdn.jsdelivr.net/gh/volentecreative/highland-war-3d@ef5e21d/posters/drone-start-' + (n ? 'narrow' : 'wide') + '-' + t + '.webp';
   })();
 </script>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@854f840/drone-hero.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/highland-war-3d@ef5e21d/drone-hero.js"></script>
 <script>
   var hwPre = window.hwPreloader;
   // up to 991px (the narrow layout) the drone is set up once, at load: no idle propeller turn (the props only
@@ -115,7 +115,7 @@
   var hwNarrow = matchMedia('(max-width: 991px)').matches;
   var hwDrone = window.DroneHero ? DroneHero.mount('#hero-drone', {
     onProgress: hwPre && hwPre.drone,     // the preloader's bar follows the real load (drone-hero.js 3.20)
-    model: 'https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@854f840/heavy_lift_drone_model.meshopt.glb',   // the meshopt-compressed model (380 KB; the same lines as the ~3 MB original beside it; its motor bells engraved by tools/engrave-bells.py); the library fetches three.js's meshopt decoder alongside it
+    model: 'https://cdn.jsdelivr.net/gh/volentecreative/highland-war-3d@ef5e21d/heavy_lift_drone_model.meshopt.glb',   // the meshopt-compressed model (380 KB; the same lines as the ~3 MB original beside it; its motor bells engraved by tools/engrave-bells.py); the library fetches three.js's meshopt decoder alongside it
     focus: 'FR',                          // the motor the path ends on. HWI's model names the arms from the pilot's seat, so FR is the front motor on the camera's left, seen from the front (FL, BR, BL for the others)
     props: 'model',                       // the model's own tri-blade propellers, turning about their hubs (rather than blades generated in their place)…
     propPhase: 60,                        // … their blades all starting at this heading (0 = a blade straight back from the opening view; the arms are turned copies in the model, so each is measured and lined up): at 60 they sweep sideways, and none points at the camera, where a blade's pitch reads as a twisted stub over the hub
