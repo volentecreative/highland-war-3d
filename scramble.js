@@ -1,7 +1,7 @@
 /* ============================================================
    scramble.js — v3.0.0
    Loaded from this repo (jsDelivr, pinned to a commit) by the pages that
-   use it: <script src=".../hwi-topo@<commit>/scramble.js"></script>
+   use it: <script src=".../highland-war-3d@<commit>/scramble.js"></script>
    Text decode on scroll-into-view (or on a DOM event). No dependencies.
    No Webflow Interactions.
 

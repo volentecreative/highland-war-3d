@@ -5,7 +5,7 @@ scroll-driven descent to it from the whole Earth. Real terrain at three levels (
 over the county, Terrain Tiles at 1 km for the region and 5 km for the continent), the Census county
 line, Natural Earth countries. One script plus a `data/` folder, no build step, embeds anywhere.
 
-**Live demo:** open `index.html`, or after enabling GitHub Pages: `https://volentecreative.github.io/hwi-topo/`
+**Live demo:** open `index.html`, or after enabling GitHub Pages: `https://volentecreative.github.io/highland-war-3d/`
 
 ## Embed (Webflow "Embed" element, or any HTML)
 
@@ -14,7 +14,7 @@ to the value shown here.
 
 ```html
 <div id="topo" style="width:100%;height:600px"></div>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@a5ecd10/topo-turntable.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/highland-war-3d@a5ecd10/topo-turntable.js"></script>
 <script>
   TopoTurntable.mount('#topo', {
 
@@ -126,7 +126,7 @@ Or the no-JavaScript way — give any element `data-topo` and it mounts itself:
 
 ```html
 <div data-topo data-config='{"tilt":40,"rotateSeconds":60}' style="height:500px"></div>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@a5ecd10/topo-turntable.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/highland-war-3d@a5ecd10/topo-turntable.js"></script>
 ```
 
 > The URL above is pinned to a commit, so it is permanent and served instantly. Swap the hash for a newer commit to pick up changes; `@main` also works but jsDelivr caches it for up to 24 h. The script loads its terrain from `data/` beside itself, so the pin covers the data too.
@@ -313,7 +313,7 @@ once so that every state of its animation fits its box.
 ```html
 <div id="flag" class="ethos-card_mark"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@22d3c1c/iso-marks.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/highland-war-3d@22d3c1c/iso-marks.js"></script>
 <script>
   IsoMarks.flag('#flag', { hover: 'closest:.ethos-card' });       // the mark, extruded; on hover it splits into three flags
   IsoMarks.conveyor('#belt', { hover: 'closest:.ethos-card' });   // a belt out of a gate; every hover runs it one box along
@@ -358,11 +358,11 @@ and step back flush when the pointer leaves. Pass `mark: { polys, width, height 
 ## drone-hero.js: the drone, on a scroll-driven camera move onto a motor
 
 The heavy-lift drone model (`heavy_lift_drone_model.glb`, in this repo: HWI's own, with the HWI-2207 motor
-shell, ~3 MB, 97k triangles; `heavy_lift_drone_model.meshopt.glb`, 380 KB, is what the hero loads) for the hero.
+shell, ~3 MB, 97k triangles; `heavy_lift_drone_model.meshopt.glb`, 418 KB, is what the hero loads) for the hero.
 The motor bells are smooth, with the HWI mark engraved on one side and a starless American flag on the other
 (`tools/engrave-bells.py` builds them from the engineer's slotted export, `git show be27eae:heavy_lift_drone_model.glb`,
-and says how to pack the result; the mark, 5 units deep, faces straight ahead on the FR motor and the flag straight back, so
-from the front the front motors show the mark and the back ones the flag; each a single setting there). It is drawn as
+and says how to pack the result; the mark, 5 units deep, faces straight ahead and the flag straight back, on the FR motor only (the one the
+hero inspects; the other three are plain); each a single setting there). It is drawn as
 lines found on screen: a first pass writes each pixel's normal, depth and part, a second draws a
 one-pixel line wherever those jump — silhouettes and creases alike, the same weight everywhere, with
 nothing behind showing through; each mesh carries its own id, so where two parts meet on screen the
@@ -461,7 +461,7 @@ damped, so a fast flick cannot expose an intermediate frame. Without a track it 
     …the copy…
   </div>
 </section>
-<script src="https://cdn.jsdelivr.net/gh/volentecreative/hwi-topo@075786c/drone-hero.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/volentecreative/highland-war-3d@075786c/drone-hero.js"></script>
 <script>DroneHero.mount('#drone', { track: 'closest:.section_hero' });</script>
 ```
 
@@ -507,7 +507,7 @@ and `ribOpacity` (0.8); `primaryIn` (`[from, to]`: the window of the path's prog
 over which the motors go from the secondary colour to the primary; null = primary throughout);
 `flag` (false: an American flag hung behind the drone in the same line work, its cloth occluding like the
 rest and its stripes, canton and stars drawn on the surface, waving slowly as if in a light breeze and moving
-in perspective with the camera), with `flagWidth` (37 model units), `flagBottom` (2), `flagZ` (−22), `flagX`
+in perspective with the camera), with `flagWidth` (37 model units), `flagVertical` (false; true hangs it vertically, as in a hangar: stripes down, the canton upper left as seen, `flagWidth` then its height; 3.39), `flagBottom` (2), `flagZ` (−22), `flagX`
 (0), `flagSway` (0.04 of its height), `flagSeconds` (16 per wave), `flagOpacity` (0.85) and `flagFade` (`[0.5, 0.85]`: the window of the path's
 progress over which the flag fades away, so the close-up never shows its edge cut across the frame; null = never); `lineWidth` (1px), `depthEdge` (0.012) and
 `normalEdge` (0.25);

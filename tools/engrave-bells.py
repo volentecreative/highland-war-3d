@@ -13,12 +13,12 @@ transform; its slotted wall is replaced by a smooth one that meets the fillets a
 and the engravings' floors and walls go in a mesh of their own, a sibling node named "Bell Filler Engraving" (the
 hero draws a line wherever one mesh meets another, so the art always outlines, even seen square on; and the name
 puts it with the motor in drone-hero.js's part reading, as one of the bell's fillers, so it turns primary and stays
-when the rest of the drone dissolves). By default (shared) all four bells are engraved alike in their own frame,
-placed for the front-right motor (the hero's focus), so they stay one mesh in the packed file.
+when the rest of the drone dissolves). Only the front-right motor (the hero's focus) carries the art; the other three
+get the smooth wall alone, and stay one shared mesh in the packed file.
 
 Settings (the optional JSON): logoAz / flagAz, the camera headings the mark and the flag face on the FR motor, in
 the hero's convention (0 = the front, negative = round to its left; the mark 0, straight ahead; the flag 180, straight back);
-markH / flagH, their heights on the wall (the wall is 204 tall); depth (5); shared (true).
+markH / flagH, their heights on the wall (the wall is 204 tall); depth (5); only ('FR', a comma list of the arms whose motors carry the art).
 """
 import sys, json, struct, numpy as np, trimesh, manifold3d, pygltflib
 from shapely.geometry import Polygon, box
@@ -161,17 +161,14 @@ def place(L):
     a, b = local_angle(az_dir(LOGO_AZ)), local_angle(az_dir(FLAG_AZ))
     return a, mirrored(a), b, mirrored(b)
 
-# SHARED (the default): every bell is engraved alike in its own frame, placed for the front-right motor (the one the
-# hero inspects), so the four stay one mesh in the packed file; the other three carry the art where their own turn
-# (and, for the mirrored two, reflection) puts it. Off: each bell placed for itself, four meshes.
-SHARED = P.get('shared', True)
+# ONLY: the motors (by arm) that carry the art, placed for the front-right motor (the one the hero inspects); the
+# others get the smooth wall alone. Default: the FR motor only.
+ONLY = [a.strip() for a in str(P.get('only', 'FR')).split(',') if a.strip()]
 bells = [i for i, n in enumerate(g.nodes) if n.mesh is not None and 'BELL' in (n.name or '')]
 def arm_of(i):   # the "Arm FR".. node above a part, as the hero reads it
     while i is not None:
         if (g.nodes[i].name or '').startswith('Arm '): return g.nodes[i].name[4:]
         i = parent.get(i)
-fr = next(i for i in bells if arm_of(i) == 'FR')
-L_ref = world(fr)[:3, :3]
 report = []
 for ni, node in enumerate(list(g.nodes)):
     if node.mesh is None or 'BELL' not in (node.name or ''): continue
@@ -185,10 +182,12 @@ for ni, node in enumerate(list(g.nodes)):
     drop |= (zf.min(1) >= W0 - 0.05) & (zf.max(1) <= W1 + 0.05) & (rf.min(1) >= R - 0.05)   # and the strips of wall between them
     keep = idx[~drop]
     # 2. where the mark and flag sit on the wall, and which way round they read
-    th_logo, m_logo, th_flag, m_flag = place(L_ref if SHARED else L)
+    th_logo, m_logo, th_flag, m_flag = place(L)
+    art = arm_of(ni) in ONLY
     # 3. the new wall, engraved
     pr = np.hypot(pos[:, 0], pos[:, 1]); at_edge = (pr > R - 0.05) & ((np.abs(pos[:, 2] - W0) < 0.01) | (np.abs(pos[:, 2] - W1) < 0.01))
-    wall = ring(np.arctan2(pos[at_edge, 1], pos[at_edge, 0])) - (to_manifold(cutter(mark2d, th_logo, m_logo)) + to_manifold(cutter(flag2d, th_flag, m_flag)))
+    wall = ring(np.arctan2(pos[at_edge, 1], pos[at_edge, 0]))
+    if art: wall = wall - (to_manifold(cutter(mark2d, th_logo, m_logo)) + to_manifold(cutter(flag2d, th_flag, m_flag)))
     wm = wall.to_mesh(); band = trimesh.Trimesh(np.asarray(wm.vert_properties)[:, :3], np.asarray(wm.tri_verts), process=True)
     # the ring's inner wall and its two end faces are sealed inside the bell and never seen: drop them
     c = band.triangles_center; fn = band.face_normals; rc = np.hypot(c[:, 0], c[:, 1])
@@ -197,8 +196,8 @@ for ni, node in enumerate(list(g.nodes)):
     c = band.triangles_center; fn = band.face_normals; rc = np.hypot(c[:, 0], c[:, 1])
     radial = (fn[:, 0] * c[:, 0] + fn[:, 1] * c[:, 1]) / np.maximum(rc, 1e-9)
     surface = (rc > R - 0.3) & (radial > 0.99)
-    cut = band.submesh([np.nonzero(~surface)[0]], append=True); band = band.submesh([np.nonzero(surface)[0]], append=True)
-    cut.unmerge_vertices()
+    cut = band.submesh([np.nonzero(~surface)[0]], append=True) if art else None; band = band.submesh([np.nonzero(surface)[0]], append=True)
+    if art: cut.unmerge_vertices()
     band.unmerge_vertices()                       # flat: each face its own normal (the wall's facets are 1.25 degrees apart)
     # 4. merge: the kept faces of the original, and the band
     used = np.unique(keep); remap = -np.ones(len(pos), np.int64); remap[used] = np.arange(len(used))
@@ -213,20 +212,21 @@ for ni, node in enumerate(list(g.nodes)):
     g.accessors.append(pygltflib.Accessor(bufferView=bvN, componentType=5126, count=len(N_), type=pygltflib.VEC3)); aN = len(g.accessors) - 1
     g.accessors.append(pygltflib.Accessor(bufferView=bvI, componentType=5125 if big else 5123, count=len(F_), type=pygltflib.SCALAR)); aI = len(g.accessors) - 1
     prim.attributes.POSITION, prim.attributes.NORMAL, prim.indices = aP, aN, aI
-    # the engravings' floors and walls: a mesh of their own beside the bell (same parent, same transform), so the hero's
-    # line pass, which draws wherever one part meets another, always outlines them, even seen square on; named as one of
-    # the bell's fillers, which drone-hero.js reads as part of the motor
-    CP = cut.vertices.astype(np.float32); CN = np.repeat(cut.face_normals, 3, axis=0).astype(np.float32); CF = cut.faces.astype(np.uint32 if len(CP) > 65535 else np.uint16).ravel()
-    b1 = append(CP.tobytes(), pygltflib.ARRAY_BUFFER); b2 = append(CN.tobytes(), pygltflib.ARRAY_BUFFER); b3 = append(CF.tobytes(), pygltflib.ELEMENT_ARRAY_BUFFER)
-    g.accessors.append(pygltflib.Accessor(bufferView=b1, componentType=5126, count=len(CP), type=pygltflib.VEC3, min=CP.min(0).tolist(), max=CP.max(0).tolist()))
-    g.accessors.append(pygltflib.Accessor(bufferView=b2, componentType=5126, count=len(CN), type=pygltflib.VEC3))
-    g.accessors.append(pygltflib.Accessor(bufferView=b3, componentType=5125 if len(CP) > 65535 else 5123, count=len(CF), type=pygltflib.SCALAR))
-    n_acc = len(g.accessors)
-    g.meshes.append(pygltflib.Mesh(primitives=[pygltflib.Primitive(attributes=pygltflib.Attributes(POSITION=n_acc - 3, NORMAL=n_acc - 2), indices=n_acc - 1, mode=4)]))
-    eng = pygltflib.Node(name='Bell Filler Engraving', mesh=len(g.meshes) - 1,
-                         matrix=node.matrix, translation=node.translation, rotation=node.rotation, scale=node.scale)
-    g.nodes.append(eng); g.nodes[parent[ni]].children.append(len(g.nodes) - 1)
-    report.append(f'{node.name} ({arm_of(ni)}): mirrored={det < 0} dropped {drop.sum()} faces, wall {len(band.faces)}, engraving {len(cut.faces)}, bell now {len(F_) // 3} (was {len(idx)})')
+    if art:
+        # the engravings' floors and walls: a mesh of their own beside the bell (same parent, same transform), so the hero's
+        # line pass, which draws wherever one part meets another, always outlines them, even seen square on; named as one of
+        # the bell's fillers, which drone-hero.js reads as part of the motor
+        CP = cut.vertices.astype(np.float32); CN = np.repeat(cut.face_normals, 3, axis=0).astype(np.float32); CF = cut.faces.astype(np.uint32 if len(CP) > 65535 else np.uint16).ravel()
+        b1 = append(CP.tobytes(), pygltflib.ARRAY_BUFFER); b2 = append(CN.tobytes(), pygltflib.ARRAY_BUFFER); b3 = append(CF.tobytes(), pygltflib.ELEMENT_ARRAY_BUFFER)
+        g.accessors.append(pygltflib.Accessor(bufferView=b1, componentType=5126, count=len(CP), type=pygltflib.VEC3, min=CP.min(0).tolist(), max=CP.max(0).tolist()))
+        g.accessors.append(pygltflib.Accessor(bufferView=b2, componentType=5126, count=len(CN), type=pygltflib.VEC3))
+        g.accessors.append(pygltflib.Accessor(bufferView=b3, componentType=5125 if len(CP) > 65535 else 5123, count=len(CF), type=pygltflib.SCALAR))
+        n_acc = len(g.accessors)
+        g.meshes.append(pygltflib.Mesh(primitives=[pygltflib.Primitive(attributes=pygltflib.Attributes(POSITION=n_acc - 3, NORMAL=n_acc - 2), indices=n_acc - 1, mode=4)]))
+        eng = pygltflib.Node(name='Bell Filler Engraving', mesh=len(g.meshes) - 1,
+                             matrix=node.matrix, translation=node.translation, rotation=node.rotation, scale=node.scale)
+        g.nodes.append(eng); g.nodes[parent[ni]].children.append(len(g.nodes) - 1)
+    report.append(f'{node.name} ({arm_of(ni)}): mirrored={det < 0} dropped {drop.sum()} faces, wall {len(band.faces)}, engraving {len(cut.faces) if art else 0}, bell now {len(F_) // 3} (was {len(idx)})')
 
 # compact: only the accessors still in use are kept (the old bells' data goes), each in a buffer view of its own
 used = sorted({a for m in g.meshes for p in m.primitives for a in [p.indices, *[v for v in vars(p.attributes).values() if isinstance(v, int)]] if a is not None})
