@@ -535,11 +535,15 @@ are pasted into Webflow by hand (or through the Webflow API); Webflow holds the 
 
 ### The contact modal
 
-The contact form is the `contact-modal` component, placed at the end of `.page-wrapper` on every page with the navbar
-(Home Draft, Contact, Privacy Policy, Terms of Use). It is a narthex modal (`vci-modal="dialog"`, key `contact`,
-`vci-modal-enter="rise"`): a centred dialog at every width, phones included, never a bottom sheet. The navbar's two
-Contact buttons, the footer's Contact links and the Contact page's button carry `vci-modal="open" vci-modal-key="contact"`
-and keep `href="/contact"` as the fallback without JavaScript; `?modal=contact` on any of those pages opens it on load.
+The navbar, the footer and the contact modal are shared components (group "Global" in the Components panel), used on
+every page with a navbar: Home Draft, Home Draft Copy, Contact, Privacy Policy and Terms of Use. Home (`/`, the splash)
+has only the contact modal. The contact form is the `contact-modal` component, placed once per page at the end of
+`.page-wrapper`. It is a narthex modal (`vci-modal="dialog"`, key `contact`, `vci-modal-enter="rise"`): a centred dialog
+from 768px up, and full screen with no gutter or border below that (never a bottom sheet). Its close button is the
+first thing in the scrolling panel and `position: sticky`, so it stays in the top corner however far the form scrolls.
+Every Contact button (the navbar's two, the footer's links, the Contact page's, the splash's and Home Draft Copy's)
+carries `vci-modal="open" vci-modal-key="contact"` and opens the modal on the page it is on; each keeps its href
+(`/contact`, or the splash's mailto) as the fallback without JavaScript. `?modal=contact` opens it on load.
 `data-lenis-prevent` on the host lets the wheel scroll the dialog while Lenis is stopped.
 
 The form inside is the original Contact form (moved, not rebuilt). Its validation and Turnstile are this repo's
@@ -553,9 +557,11 @@ the message) only once it has been edited and left, or Send was pressed; a send 
 Webflow. The `is-valid` / `is-invalid` combo classes are only ever set by the script, so the Style Manager's
 "Clean up" would count them unused: keep them.
 
-Cloudflare Turnstile (`data-hw-sitekey` `0x4AAAAAAFSaJhdnoR4pxeKS`, `data-hw-action` `contact`) renders in
-`.form_turnstile` (`data-hw-form="turnstile"`) the first time the dialog opens, follows `data-theme` on `<html>`
-(the theme toggle), and Send waits for its token. The token is not added to the submission: Webflow's form handler
+Cloudflare Turnstile (`data-hw-sitekey` `0x4AAAAAAFSaJhdnoR4pxeKS`, `data-hw-action` `contact`) is invisible: it
+renders into `.form_turnstile` (`data-hw-form="turnstile"`) with `appearance: 'interaction-only'` the first time the
+form comes into view, and shows nothing unless Cloudflare asks a visitor to click (the widget's mode set to Invisible
+in the Cloudflare dashboard means it never shows). Its field takes no space while it is empty (`is-turnstile` combos).
+It follows `data-theme` on `<html>` (the theme toggle), and Send waits for its token. The token is not added to the submission: Webflow's form handler
 cannot check it, so the widget stops bots that drive the page, not one that posts straight to Webflow's endpoint.
 
 The site-wide code (Lenis, the theme toggle, the navbar height variable, image focus points and the older
