@@ -583,9 +583,16 @@ Turnstile token is single-use and cannot be reset from outside, so the form is n
 `.button_text` and an optional `.button_icon` SVG. Props: Text, Link, Visibility; Icon (on/off), SVG Path and SVG
 Viewbox (the icon is drawn in the text colour); Modal action and Modal key, which become `vci-modal` /
 `vci-modal-key` on the link, so a button can open (`open` / `contact`) or close (`close`) a narthex modal without
-custom attributes. Variants: Primary (filled, the `.button` class as before) and Secondary (transparent with a 1px
-outline in border-02, filling with border-01 on hover). `.button` itself is now inline-flex with a 0.5rem gap so an
-icon sits beside the text; nothing else about existing buttons changed.
+custom attributes. Variants: Primary (filled, the `.button` class as before), Secondary (transparent with a 1px
+outline in border-02, filling with border-01 on hover) and Primary (full width), for the mobile menu. Hover is
+instant (no transition on `.button`). `.button` itself is inline-flex with a 0.5rem gap so an icon sits beside the
+text. Every link button on the site is an instance: the navbar's two Contact buttons (each in a wrapper that shows
+it at the right size, `.navbar_cta-desktop` hidden from 991px down, `.navbar_cta-mobile` shown only there, as the
+old `is-nav` / `hide-on-mobile` combos did), Home Draft's Contact and Request Spec Sheet buttons, Home Draft Copy's,
+the splash's, and the success state's Close. The form's Send stays Webflow's own submit button, with class `button`.
+
+The modal's dim (`.contact-modal_dim`) is a 60% black background at full opacity with a 10px backdrop blur: an
+element's opacity applies to its blurred backdrop too, so a translucent element would show the page half sharp.
 
 The site-wide code (Lenis, the theme toggle, the navbar height variable, image focus points and the older
 scramble.js v6) is in Site settings, custom code, and the nav comes from the `narthex` repo.
