@@ -550,9 +550,10 @@ The form inside is the original Contact form (moved, not rebuilt). Its validatio
 `form-check.js` (header comment = reference), a registered script in Site settings loaded site-wide from jsDelivr
 pinned to a commit (`hwFormCheck`). The Form Block is `data-hw-form="form"`, each `.form_field-wrapper` is
 `data-hw-form="field"` with a `.form_field-message` (`data-hw-form="message"`). A field turns `is-valid` as soon as
-its value is good: white border and outline (`.form_input.is-valid`, text-01, so it inverts in the light theme) and
-its call sign in the message (`data-hw-valid-text` on the field: Copy that / Comms confirmed / Roger / Ready to
-transmit; "Solid copy" on the form for anything else). It turns `is-invalid` (dashed border, the browser's reason as
+its value is good: white border and outline (`.form_input.is-valid`, text-01, so it inverts in the light theme), and
+the small square across from its label lights up (`.form_field-mark`, `data-hw-form="mark"`, in a
+`.form_field-header` row with the label). No text when valid. Name has `data-hw-autofocus`: it takes focus when the
+modal opens on desktop (992px and up, mouse or trackpad), never on touch screens. It turns `is-invalid` (dashed border, the browser's reason as
 the message) only once it has been edited and left, or Send was pressed; a send with anything invalid never reaches
 Webflow. The `is-valid` / `is-invalid` combo classes are only ever set by the script, so the Style Manager's
 "Clean up" would count them unused: keep them.
