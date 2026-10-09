@@ -530,5 +530,33 @@ are pasted into Webflow by hand (or through the Webflow API); Webflow holds the 
 - `embed-hero-drone.html`: the Embed in `.hero-drone_canvas` (drone-hero.js, with `onProgress` wired to the preloader).
 - `embed-scramble.html`: the Embed at the end of the page (scramble.js 2.5, whose runs wait for the preloader).
 
+- `contact-footer.html`: Page settings, custom code, footer, on `contact`: opens the contact modal on arrival.
+- `form-check.js` (repo root): the contact form's validation and Turnstile, loaded site-wide (below).
+
+### The contact modal
+
+The contact form is the `contact-modal` component, placed at the end of `.page-wrapper` on every page with the navbar
+(Home Draft, Contact, Privacy Policy, Terms of Use). It is a narthex modal (`vci-modal="dialog"`, key `contact`,
+`vci-modal-enter="rise"`): a centred dialog at every width, phones included, never a bottom sheet. The navbar's two
+Contact buttons, the footer's Contact links and the Contact page's button carry `vci-modal="open" vci-modal-key="contact"`
+and keep `href="/contact"` as the fallback without JavaScript; `?modal=contact` on any of those pages opens it on load.
+`data-lenis-prevent` on the host lets the wheel scroll the dialog while Lenis is stopped.
+
+The form inside is the original Contact form (moved, not rebuilt). Its validation and Turnstile are this repo's
+`form-check.js` (header comment = reference), a registered script in Site settings loaded site-wide from jsDelivr
+pinned to a commit (`hwFormCheck`). The Form Block is `data-hw-form="form"`, each `.form_field-wrapper` is
+`data-hw-form="field"` with a `.form_field-message` (`data-hw-form="message"`). A field turns `is-valid` as soon as
+its value is good: white border and outline (`.form_input.is-valid`, text-01, so it inverts in the light theme) and
+its call sign in the message (`data-hw-valid-text` on the field: Copy that / Comms confirmed / Roger / Ready to
+transmit; "Solid copy" on the form for anything else). It turns `is-invalid` (dashed border, the browser's reason as
+the message) only once it has been edited and left, or Send was pressed; a send with anything invalid never reaches
+Webflow. The `is-valid` / `is-invalid` combo classes are only ever set by the script, so the Style Manager's
+"Clean up" would count them unused: keep them.
+
+Cloudflare Turnstile (`data-hw-sitekey` `0x4AAAAAAFSaJhdnoR4pxeKS`, `data-hw-action` `contact`) renders in
+`.form_turnstile` (`data-hw-form="turnstile"`) the first time the dialog opens, follows `data-theme` on `<html>`
+(the theme toggle), and Send waits for its token. The token is not added to the submission: Webflow's form handler
+cannot check it, so the widget stops bots that drive the page, not one that posts straight to Webflow's endpoint.
+
 The site-wide code (Lenis, the theme toggle, the navbar height variable, image focus points and the older
 scramble.js v6) is in Site settings, custom code, and the nav comes from the `narthex` repo.
