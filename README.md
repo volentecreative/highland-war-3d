@@ -531,6 +531,8 @@ are pasted into Webflow by hand (or through the Webflow API); Webflow holds the 
 - `embed-scramble.html`: the Embed at the end of the page (scramble.js 2.5, whose runs wait for the preloader).
 
 - `contact-footer.html`: Page settings, custom code, footer, on `contact`: opens the contact modal on arrival.
+- `narthex-lenis-pause.js`: the registered inline script `narthexLenisPause` (Site settings, footer): Lenis stops
+  while a narthex menu or modal is open, tracked by name so a repeated open can never leave it stopped.
 - `form-check.js` (repo root): the contact form's validation and Turnstile, loaded site-wide (below).
 
 ### The contact modal
@@ -538,8 +540,10 @@ are pasted into Webflow by hand (or through the Webflow API); Webflow holds the 
 The navbar, the footer and the contact modal are shared components (group "Global" in the Components panel), used on
 every page with a navbar: Home Draft, Home Draft Copy, Contact, Privacy Policy and Terms of Use. Home (`/`, the splash)
 has only the contact modal. The contact form is the `contact-modal` component, placed once per page at the end of
-`.page-wrapper`. It is a narthex modal (`vci-modal="dialog"`, key `contact`, `vci-modal-enter="rise"`): a centred dialog
-from 768px up, and full screen with no gutter or border below that (never a bottom sheet). Its close button is the
+`.page-wrapper`. It is a narthex modal (`vci-modal="dialog"`, key `contact`, `vci-modal-enter="sheet"`, 420ms, over a 60% black
+dim): it slides all the way up from the bottom on phones and rises a little elsewhere, and leaves the same way. The
+breakpoint is narthex's `swipe-media`, set to `(max-width: 767px)` in Site settings, head, before narthex loads. A
+centred dialog from 768px up, and full screen with no gutter or border below that (never a bottom sheet). Its close button is the
 first thing in the scrolling panel and `position: sticky`, so it stays in the top corner however far the form scrolls.
 Every Contact button (the navbar's two, the footer's links, the Contact page's, the splash's and Home Draft Copy's)
 carries `vci-modal="open" vci-modal-key="contact"` and opens the modal on the page it is on; each keeps its href
