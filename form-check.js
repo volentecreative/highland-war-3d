@@ -1,5 +1,5 @@
 /* ============================================================
-   form-check.js — v1.2.0
+   form-check.js — v1.3.0
    Loaded site-wide from this repo (jsDelivr, pinned to a commit), as a
    registered script in Site settings: the contact form sits in the
    contact-modal component on every page with the navbar.
@@ -48,6 +48,12 @@
    bad one. A send before Turnstile's token has arrived waits, and goes by
    itself when it does. A token is good once, so the next send (a retry
    after Webflow's error message) fetches a fresh one first.
+
+   v1.3.0: shares Cloudflare's script with Webflow. A Webflow form with its
+   built-in spam protection (data-turnstile-sitekey on the <form>) loads
+   api.js itself; this waits for that copy instead of loading a second one,
+   which Cloudflare does not support. A failed check now says why: the error
+   code is in the message, the console and data-hw-error on the widget.
 
    v1.2.0: a valid field lights its mark (data-hw-form="mark", the square
    across from the label) instead of saying anything; valid text is now
@@ -180,6 +186,9 @@
   }
 
   /* ---------- Turnstile ---------- */
+  // One copy of api.js per page. Webflow's forms load it themselves (on idle)
+  // when the site's spam protection is on, so if a form carries Webflow's key,
+  // wait up to 10s for that copy; load our own only if none turns up.
   var loading = false, queue = [];
   function withApi(cb) {
     if (w.turnstile && w.turnstile.render) { cb(w.turnstile); return; }
@@ -187,12 +196,29 @@
     if (loading) return;
     loading = true;
     var done = function (ts) { var q = queue; queue = []; loading = false; q.forEach(function (fn) { fn(ts); }); };
-    w.hwTurnstileOnload = function () { done(w.turnstile); };
-    var s = d.createElement('script');
-    s.src = API + '?render=explicit&onload=hwTurnstileOnload';
-    s.async = true;
-    s.addEventListener('error', function () { done(null); });
-    d.head.appendChild(s);
+    var load = function () {
+      if (w.turnstile && w.turnstile.render) { done(w.turnstile); return; }
+      if (d.querySelector('script[src^="' + API + '"]')) { wait(10000); return; }
+      w.hwTurnstileOnload = function () { done(w.turnstile); };
+      var s = d.createElement('script');
+      s.src = API + '?render=explicit&onload=hwTurnstileOnload';
+      s.async = true;
+      s.addEventListener('error', function () { done(null); });
+      d.head.appendChild(s);
+    };
+    var wait = function (ms) {
+      var t0 = Date.now();
+      (function poll() {
+        if (w.turnstile && w.turnstile.render) {
+          if (w.turnstile.ready) { try { w.turnstile.ready(function () { done(w.turnstile); }); return; } catch (x) {} }
+          done(w.turnstile); return;
+        }
+        if (Date.now() - t0 > ms) { if (d.querySelector('script[src^="' + API + '"]')) done(null); else load(); return; }
+        setTimeout(poll, 100);
+      })();
+    };
+    if (d.querySelector('[data-turnstile-sitekey]') || d.querySelector('script[src^="' + API + '"]')) wait(10000);
+    else load();
   }
   function theme() {
     var t = d.documentElement.getAttribute('data-theme');
@@ -204,8 +230,14 @@
     if (m) m.classList.toggle(INVALID, !!bad);
     if (fld) fld.classList.toggle(INVALID, !!bad);
   }
-  function failed(t) {
-    tsMessage(t, ERROR_TEXT, true);
+  // Cloudflare's error codes say what went wrong (110200: this hostname is not
+  // allowed for the site key; 1101xx/1102xx: key or setup; 300xxx/600xxx: the
+  // challenge failed in this browser). Shown so a failure can be diagnosed.
+  function failed(t, code) {
+    code = code == null ? '' : String(code);
+    if (code) t.setAttribute('data-hw-error', code); else t.removeAttribute('data-hw-error');
+    if (w.console && console.warn) console.warn('[form-check] Turnstile error' + (code ? ' ' + code : ''));
+    tsMessage(t, code ? ERROR_TEXT.replace('did not pass.', 'did not pass (error ' + code + ').') : ERROR_TEXT, true);
   }
 
   function render(t) {
@@ -219,7 +251,7 @@
     widgets.set(t, st);
     withApi(function (ts) {
       st.pending = false;
-      if (!ts) { failed(t); return; }
+      if (!ts) { failed(t, 'script'); return; }
       if (old && old.id != null) { try { ts.remove(old.id); } catch (x) {} }
       var opts = {
         sitekey: key,
@@ -230,14 +262,15 @@
         callback: function (tok) { st.token = tok; st.spent = false; verified(t); },
         'expired-callback': function () { st.token = null; },
         'timeout-callback': function () { st.token = null; },
-        'error-callback': function () { st.token = null; failed(t); }
+        'error-callback': function (code) { st.token = null; failed(t, code); }
       };
       var action = t.getAttribute('data-hw-action');
       if (action) opts.action = action;
-      try { st.id = ts.render(t, opts); } catch (x) { failed(t); }
+      try { st.id = ts.render(t, opts); } catch (x) { failed(t, 'render'); }
     });
   }
   function verified(t) {
+    t.removeAttribute('data-hw-error');
     tsMessage(t, '', false);
     var f = formOf(t);
     if (!f || !waiting.has(f)) return;
