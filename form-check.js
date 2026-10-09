@@ -1,5 +1,5 @@
 /* ============================================================
-   form-check.js — v1.1.0
+   form-check.js — v1.2.0
    Loaded site-wide from this repo (jsDelivr, pinned to a commit), as a
    registered script in Site settings: the contact form sits in the
    contact-modal component on every page with the navbar.
@@ -17,17 +17,26 @@
                                 (name@host.tld; the browser takes name@host).
      data-hw-form="field"       the wrapper of one control, its label and
                                 its message. Gets the state class too.
-     data-hw-form="message"     inside a field: says the valid text, or why
-                                the value is not valid; empty otherwise.
+     data-hw-form="message"     inside a field: says why the value is not
+                                valid (or the valid text, if one is set);
+                                empty otherwise.
+     data-hw-form="mark"        inside a field: a marker that only takes the
+                                state classes (the square that lights up
+                                beside the label). aria-hidden.
      data-hw-form="turnstile"   where the Turnstile widget renders, inside a
                                 field of its own (its message says why Send
                                 is waiting). Needs data-hw-sitekey; takes
                                 data-hw-action.
+     data-hw-autofocus          on a control: focused when the narthex modal
+                                it sits in opens (vci:modal:open), on desktop
+                                only: at least 992px wide, with a mouse or
+                                trackpad. Never on touch screens.
      data-hw-valid-text="…"     what a message says when its field is good.
                                 Read from the field, else from the form.
-                                Default "Valid".
+                                Default: nothing.
 
-   STATES: is-valid / is-invalid on the control, its field and its message.
+   STATES: is-valid / is-invalid on the control, its field, its message and
+   its mark.
    Valid shows as soon as the value is good, while typing. Invalid waits
    until the field has been edited and left, or Send was pressed, so a
    half-typed address is never scolded; after that it follows the typing.
@@ -39,6 +48,12 @@
    bad one. A send before Turnstile's token has arrived waits, and goes by
    itself when it does. A token is good once, so the next send (a retry
    after Webflow's error message) fetches a fresh one first.
+
+   v1.2.0: a valid field lights its mark (data-hw-form="mark", the square
+   across from the label) instead of saying anything; valid text is now
+   opt-in (data-hw-valid-text), and error messages are unchanged. A control
+   with data-hw-autofocus is focused when its modal opens, on desktop only
+   (a phone or tablet would throw its keyboard up over the form).
 
    v1.1.0: Turnstile is invisible: it renders with appearance
    "interaction-only", so nothing shows unless Cloudflare asks a visitor to
@@ -99,7 +114,7 @@
   }
   function validText(c) {
     var holder = c.closest('[data-hw-valid-text]');
-    return holder ? holder.getAttribute('data-hw-valid-text') : 'Valid';
+    return holder ? holder.getAttribute('data-hw-valid-text') : '';
   }
 
   /* ---------- validation ---------- */
@@ -127,8 +142,8 @@
     if (force) touched.set(c, true);
     if (valid) st = isEmpty(c) ? '' : 'valid';
     else st = (touched.get(c) || shown.get(c) === 'invalid') ? 'invalid' : '';
-    var fld = fieldOf(c), msg = messageOf(c);
-    [c, fld, msg].forEach(function (el) {
+    var fld = fieldOf(c), msg = messageOf(c), mark = fld && fld.querySelector('[data-hw-form="mark"]');
+    [c, fld, msg, mark].forEach(function (el) {
       if (!el) return;
       el.classList.toggle(VALID, st === 'valid');
       el.classList.toggle(INVALID, st === 'invalid');
@@ -145,6 +160,8 @@
     ready.set(f, true);
     f.noValidate = true;
     controls(f).forEach(function (c) {
+      var fld = fieldOf(c), mark = fld && fld.querySelector('[data-hw-form="mark"]');
+      if (mark) mark.setAttribute('aria-hidden', 'true');
       var msg = messageOf(c);
       if (msg) {
         if (!msg.id) msg.id = 'hw-form-msg-' + (++uid);
@@ -306,6 +323,19 @@
     if (!f) return;
     setTimeout(function () {
       controls(f).forEach(function (c) { dirty['delete'](c); touched['delete'](c); shown['delete'](c); paint(c); });
+    }, 0);
+  });
+
+  // Autofocus on desktop. narthex focuses the dialog's close button as it
+  // opens, after this event; so this waits a tick and then moves focus on
+  // (narthex's own retry leaves focus alone once it is inside the dialog).
+  var DESKTOP = '(min-width: 992px) and (hover: hover) and (pointer: fine)';
+  d.addEventListener('vci:modal:open', function (e) {
+    var host = e.target, c = host && host.querySelector && host.querySelector('[data-hw-autofocus]');
+    if (!c || !w.matchMedia || !w.matchMedia(DESKTOP).matches) return;
+    setTimeout(function () {
+      if (!host.contains(c)) return;
+      try { c.focus({ preventScroll: true }); } catch (x) { c.focus(); }
     }, 0);
   });
 
