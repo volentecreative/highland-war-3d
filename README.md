@@ -571,5 +571,21 @@ in the Cloudflare dashboard means it never shows). Its field takes no space whil
 It follows `data-theme` on `<html>` (the theme toggle), and Send waits for its token. The token is not added to the submission: Webflow's form handler
 cannot check it, so the widget stops bots that drive the page, not one that posts straight to Webflow's endpoint.
 
+After a send, Webflow shows the form's success block (`.w-form-done`); the modal's "Contact" heading and subtext
+step aside while it shows (Site settings, head), leaving the Highland mark turning like the preloader's (an embed;
+still for reduced motion), "Received.", "We'll be in touch soon." and a Close button (the `button` component,
+Secondary, Modal action "close"). Reopening the modal before a reload shows the same success state: Webflow's own
+Turnstile token is single-use and cannot be reset from outside, so the form is not offered a second time.
+
+### The button component
+
+`button` (group "Global") is the site's link button, after Christ the King's: a Link with class `button`, a
+`.button_text` and an optional `.button_icon` SVG. Props: Text, Link, Visibility; Icon (on/off), SVG Path and SVG
+Viewbox (the icon is drawn in the text colour); Modal action and Modal key, which become `vci-modal` /
+`vci-modal-key` on the link, so a button can open (`open` / `contact`) or close (`close`) a narthex modal without
+custom attributes. Variants: Primary (filled, the `.button` class as before) and Secondary (transparent with a 1px
+outline in border-02, filling with border-01 on hover). `.button` itself is now inline-flex with a 0.5rem gap so an
+icon sits beside the text; nothing else about existing buttons changed.
+
 The site-wide code (Lenis, the theme toggle, the navbar height variable, image focus points and the older
 scramble.js v6) is in Site settings, custom code, and the nav comes from the `narthex` repo.
