@@ -17,7 +17,7 @@ when the rest of the drone dissolves). By default (shared) all four bells are en
 placed for the front-right motor (the hero's focus), so they stay one mesh in the packed file.
 
 Settings (the optional JSON): logoAz / flagAz, the camera headings the mark and the flag face on the FR motor, in
-the hero's convention (0 = the front, negative = round to its left; -40 is inspection pose 01; the flag 140, straight opposite);
+the hero's convention (0 = the front, negative = round to its left; the mark 0, straight ahead; the flag 180, straight back);
 markH / flagH, their heights on the wall (the wall is 204 tall); depth (5); shared (true).
 """
 import sys, json, struct, numpy as np, trimesh, manifold3d, pygltflib
@@ -35,8 +35,8 @@ DEPTH = P.get('depth', 5.0)     # engraving depth (the old slots were 2.4; the s
 SEG = 288                       # segments round the ring's hidden inner wall (the outer wall takes the original's own vertices)
 MARK_H = P.get('markH', 135.0)  # the mark's height on the wall
 FLAG_H = P.get('flagH', 88.0)   # the flag's height (13 stripes)
-LOGO_AZ = P.get('logoAz', -40.0)   # the heading the mark faces, in the hero's camera convention (0 = the drone's front, negative = round to its left): pose 01's
-FLAG_AZ = P.get('flagAz', 140.0)   # the flag's: straight opposite the mark
+LOGO_AZ = P.get('logoAz', 0.0)     # the heading the mark faces on the FR motor, in the hero's camera convention (0 = the drone's front, negative = round to its left): straight ahead
+FLAG_AZ = P.get('flagAz', 180.0)   # the flag's: straight back, opposite the mark
 
 MARK_D = ('M46.5 0H28.66V8.5H36.07V36.82H44.58V8.5H48L51.98 11.83V4.59L46.51 0H46.5Z'
           'M76.37 2.34H71.7L51.96 18.87V64.21L60.46 71.32V22.82L67.86 16.64V64.9L76.36 57.75V9.19L80.61 5.9L76.36 2.34H76.37Z'

@@ -361,8 +361,8 @@ The heavy-lift drone model (`heavy_lift_drone_model.glb`, in this repo: HWI's ow
 shell, ~3 MB, 97k triangles; `heavy_lift_drone_model.meshopt.glb`, 380 KB, is what the hero loads) for the hero.
 The motor bells are smooth, with the HWI mark engraved on one side and a starless American flag on the other
 (`tools/engrave-bells.py` builds them from the engineer's slotted export, `git show be27eae:heavy_lift_drone_model.glb`,
-and says how to pack the result; the mark, 5 units deep, faces inspection pose 01 on the FR motor and the flag is straight
-opposite, each a single setting there). It is drawn as
+and says how to pack the result; the mark, 5 units deep, faces straight ahead on the FR motor and the flag straight back, so
+from the front the front motors show the mark and the back ones the flag; each a single setting there). It is drawn as
 lines found on screen: a first pass writes each pixel's normal, depth and part, a second draws a
 one-pixel line wherever those jump — silhouettes and creases alike, the same weight everywhere, with
 nothing behind showing through; each mesh carries its own id, so where two parts meet on screen the
