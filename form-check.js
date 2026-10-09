@@ -1,5 +1,5 @@
 /* ============================================================
-   form-check.js — v1.0.0
+   form-check.js — v1.1.0
    Loaded site-wide from this repo (jsDelivr, pinned to a commit), as a
    registered script in Site settings: the contact form sits in the
    contact-modal component on every page with the navbar.
@@ -40,7 +40,13 @@
    itself when it does. A token is good once, so the next send (a retry
    after Webflow's error message) fetches a fresh one first.
 
-   TURNSTILE: loaded from Cloudflare the first time the widget comes into
+   v1.1.0: Turnstile is invisible: it renders with appearance
+   "interaction-only", so nothing shows unless Cloudflare asks a visitor to
+   click (set the widget's mode to Invisible in the Cloudflare dashboard and
+   it never shows at all). It starts when the form comes into view, not the
+   widget's own spot, which may be below the fold.
+
+   TURNSTILE: loaded from Cloudflare the first time the form comes into
    view, so a form in a closed modal costs nothing until it is opened. Its
    theme follows data-theme on <html> (the site's light/dark toggle), and it
    is drawn again if that changed while it was out of view. The token is
@@ -202,6 +208,7 @@
         sitekey: key,
         theme: th,
         size: 'flexible',
+        appearance: 'interaction-only',
         'response-field': false,
         callback: function (tok) { st.token = tok; st.spent = false; verified(t); },
         'expired-callback': function () { st.token = null; },
@@ -222,11 +229,14 @@
     if (f.requestSubmit) f.requestSubmit(sub && sub.form === f ? sub : undefined);
     else { var b = sub || f.querySelector('[type="submit"]'); if (b) b.click(); }
   }
+  // Watch the form, not the widget: an invisible widget has no size of its own,
+  // and its spot can sit below the fold of a long form.
   function watchTurnstile(t) {
-    if (!('IntersectionObserver' in w)) { render(t); return; }
+    var f = formOf(t);
+    if (!f || !('IntersectionObserver' in w)) { render(t); return; }
     new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) { if (e.isIntersecting) render(e.target); });
-    }).observe(t);
+      entries.forEach(function (e) { if (e.isIntersecting) render(t); });
+    }).observe(f);
   }
   function tokenOf(f) {
     var t = turnstileOf(f), st = t && widgets.get(t);
